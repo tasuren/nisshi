@@ -9,4 +9,4 @@ from .caches import Caches
 __all__ = ("__version__", "Manager", "Page", "Config", "Caches")
 
 
-__version__ = "0.1.0b"
+__version__ = "0.1.0a"
