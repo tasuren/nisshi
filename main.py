@@ -1,0 +1,1 @@
+from pyssg import __main__

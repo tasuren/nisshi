@@ -1,0 +1,11 @@
+.DS_Store
+.*
+!.gitignore
+
+*.*-workspace
+*.*-project
+
+pyssg.toml
+source
+templates
+output
