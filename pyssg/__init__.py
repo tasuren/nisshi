@@ -10,3 +10,4 @@ __all__ = ("__version__", "Manager", "Page", "Config", "Caches")
 
 
 __version__ = "0.1.0a"
+__author__ = "tasuren"
