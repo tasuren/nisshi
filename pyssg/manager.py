@@ -134,15 +134,15 @@ class Manager(Generic[PageT]):
         else:
             return data
 
-    def _walk_for_build(self, path: str) -> Iterator[str]:
+    def _walk_for_build(self, base_path: str) -> Iterator[str]:
         # 全ファイルを一つづつ列挙して、そのパスの処理後の出力先のフォルダがなければ作ります。
         # そして、その列挙したファイルのパスを返します。
-        if exists(path):
-            for current, _, paths in walk(path):
+        if exists(base_path):
+            for current, _, paths in walk(base_path):
                 # フォルダがないなら作る。
-                path = path.replace(current, self.config.output_folder)
-                if not exists(path):
-                    mkdir(path)
+                current_output = current.replace(base_path, self.config.output_folder)
+                if not exists(current_output):
+                    mkdir(current_output)
                 # ファイルのパスを返す。
                 for path in map(lambda p: "/".join((current, p)), paths):
                     yield path
