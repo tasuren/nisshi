@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Any
 from collections.abc import Sequence
 
+from os.path import exists
+
 from toml import load
 
 from .common import Context
@@ -31,13 +33,17 @@ class Config(Context[Any]):
     metadata: dict[str, Any] = {}
 
     @classmethod
-    def from_file(cls, path: str) -> Config:
+    def from_file(cls, path: str, ignore_missing: bool = False) -> Config:
         """Load the configuration file.
 
         Args:
-            path: The path to the configuration file."""
-        with open(path, "r") as f:
-            raw = load(f)
+            path: The path to the configuration file.
+            ignore_missing: Whether to ignore missing the configuration file."""
+        if not ignore_missing or exists(path):
+            with open(path, "r") as f:
+                raw = load(f)
+        else:
+            raw = {}
 
         data = cls(raw)
 

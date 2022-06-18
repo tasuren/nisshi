@@ -296,11 +296,12 @@ class Manager(Generic[PageT]):
 
     def _clean(self, path: str) -> None:
         # キャッシュにある指定されたパスを削除します。
-        if self.caches.outputs[path].output_path \
-                and exists(self.caches.outputs[path].output_path):
-            # もし身元不明のファイルがあった場合は消す。
-            self._remove(self.caches.outputs[path].output_path)
-            self.console.log("{} {}".format(
-                _green('Cleaned'), self.caches.outputs[path].output_path
-            ))
-        del self.caches.outputs[path]
+        if not path.startswith(self.config.layout_folder):
+            if self.caches.outputs[path].output_path \
+                    and exists(self.caches.outputs[path].output_path):
+                # もし身元不明のファイルがあった場合は消す。
+                self._remove(self.caches.outputs[path].output_path)
+                self.console.log("{} {}".format(
+                    _green('Cleaned'), self.caches.outputs[path].output_path
+                ))
+            del self.caches.outputs[path]

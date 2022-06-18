@@ -9,7 +9,7 @@ from pyssg import __version__, Manager, Page, Config
 
 def _build(config_file: str, hot_reload: bool, address: tuple[str, int] = ("", 0)):
     # ビルドをします。また、ホットリロードやサーバーの立ち上げをします。
-    manager = Manager[Page](Config.from_file(config_file))
+    manager = Manager[Page](Config.from_file(config_file, True))
     manager.console.quiet = False
 
     if hot_reload:
@@ -42,7 +42,7 @@ def cli(version: bool):
 
 @cli.command()
 @(_config_file_option := click.option(
-    "--config-file", type=click.Path(exists=True, dir_okay=False, readable=True),
+    "--config-file", type=click.Path(dir_okay=False, readable=True),
     default="pyssg.toml", help="The path to the configuration file."
 ))
 @click.option(
