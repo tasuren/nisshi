@@ -27,6 +27,9 @@ from .config import Config
 from .page import Page
 
 
+__all__ = ("Manager",)
+
+
 def _color(m, c, t):
     return f"[{m} {c}]{t}[/{m} {c}]"
 def _green(text: str) -> str:

@@ -11,6 +11,9 @@ if TYPE_CHECKING:
     from .manager import Manager
 
 
+__all__ = ("PageContext", "Page")
+
+
 class PageContext(Context):
     "A class typed after :class:`Context` for web page metadata."
 
