@@ -14,18 +14,24 @@ if TYPE_CHECKING:
 class PageContext(Context):
     "A class typed after :class:`Context` for web page metadata."
 
-    title: str = "..."
-    description: str = "..."
+    title: str = ""
+    description: str = ""
     head: str = ""
+    layout: str | None = None
 
 
 SelfT = TypeVar("SelfT", bound="Page")
 class Page:
+
+    result = ""
+    content = ""
+    layout: str | None = None
+
     def __init__(self: SelfT, manager: Manager[SelfT], path: str):
         self.manager, self.path = manager, path
-        self.result, self.content = "", ""
 
         self.ctx = PageContext()
+        self.ctx.metadata = self.manager.config.metadata
 
     def build(self, **kwargs: Any) -> str:
         kwargs.setdefault("__self__", self)
@@ -39,7 +45,13 @@ class Page:
         )
         return self.result
 
-    def get_layout(self) -> str:
-        """Gets the path to the layout file.
-        Override this function if you want to dynamically change the layout file path."""
-        return self.manager.config.layout_file
+    def get_layout(self, first: bool = False) -> str:
+        "Gets the path to the layout file."
+        if first or self.layout is None:
+            self.layout = "{}/{}".format(
+                self.manager.config.layout_folder,
+                self.manager.config.default_layout
+                if self.ctx.layout is None
+                else self.ctx.layout
+            )
+        return self.layout

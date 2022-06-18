@@ -16,16 +16,18 @@ __all__ = ("Config",)
 class Config(Context[Any]):
     "Context for storing settings."
 
-    template_folder = "templates"
-    source_folder = "source"
-    output_folder = "output"
-    script_folder = "script"
-    layout_file = "templates/layout.html"
+    layout_folder = "layouts"
+    include_folder = "includes"
+    source_folder = "sources"
+    output_folder = "outputs"
+    script_folder = "scripts"
+    default_layout = "layout.html"
     exclude: Sequence[str] = ()
     include: Sequence[str] = ()
     file_ext: Sequence[str] = ("md",)
-    caches_file = ".pyssg_cache.json"
+    caches_file = ".pyssg_caches.json"
     output_ext = "html"
+    debug_mode: bool = False
     metadata: dict[str, Any] = {}
 
     @classmethod
@@ -37,8 +39,6 @@ class Config(Context[Any]):
         with open(path, "r") as f:
             raw = load(f)
 
-        data = cls()
-        if "build" in raw:
-            data.update(raw["build"])
+        data = cls(raw)
 
         return data

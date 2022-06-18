@@ -7,19 +7,24 @@ import click
 from pyssg import __version__, Manager, Page, Config
 
 
-def _build(config_file: str, hot_reload: bool, address: tuple[str, int] | None = None):
+def _build(config_file: str, hot_reload: bool, address: tuple[str, int] = ("", 0)):
     # ビルドをします。また、ホットリロードやサーバーの立ち上げをします。
     manager = Manager[Page](Config.from_file(config_file))
     manager.console.quiet = False
 
     if hot_reload:
+        manager.build()
         # ファイル監視をするための設定をする。
         if address is None:
             manager.build_hot_reload()
         else:
+            manager.console.log("Starting web server: http://%s:%s" % address)
             class PatchedHTTPRequestHandler(SimpleHTTPRequestHandler):
+                def __init__(self, *args, **kwargs):
+                    kwargs["directory"] = manager.config.output_folder
+                    super().__init__(*args, **kwargs)
                 def log_message(self, format, *args):
-                    manager.console.log("Serve", self.address_string(), (format % args)[:-2])
+                    manager.console.log("Serve", self.address_string(), (format % args))
             app = HTTPServer(address, PatchedHTTPRequestHandler)
             manager.build_hot_reload(app.serve_forever)
             app.shutdown()
@@ -58,4 +63,8 @@ def serve(config_file: str, port: int, host: str):
     _build(config_file, True, (host, port))
 
 
-cli()
+def main():
+    cli()
+
+
+main()

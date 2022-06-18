@@ -39,6 +39,11 @@ setup(
     keywords='ssg',
     packages=[NAME],
     package_data={NAME: ("py.typed",)},
+    entry_points={
+        "console_scripts": [
+            "pyssg = pyssg.__main__:main"
+        ]
+    },
     install_requires=[],
     extras_requires={},
     python_requires='>=3.10.0',
