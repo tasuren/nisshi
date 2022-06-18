@@ -8,6 +8,10 @@ NAME = "pyssg"
 DESCRIPTION = "Little, simple and fast Static Site Generator."
 
 
+with open('requirements.txt') as f:
+    requirements = f.read().splitlines()
+
+
 if exists("README.md"):
     with open("README.md", "r") as f:
         long_description = f.read()
@@ -44,7 +48,7 @@ setup(
             "pyssg = pyssg.__main__:main"
         ]
     },
-    install_requires=[],
+    install_requires=requirements,
     extras_requires={},
     python_requires='>=3.10.0',
     classifiers=[
