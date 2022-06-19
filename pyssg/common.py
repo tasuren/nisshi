@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Generic, TypeVar, Any
 
 from inspect import get_annotations
+from types import SimpleNamespace
 
 
 __all__ = ("Context",)

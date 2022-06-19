@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 from os.path import exists
-from os import stat
+from os import stat, utime
+
+from dataclasses import dataclass
 
 from .common import Context
 from .json import loads, dumps
 
 
-__all__ = ("Caches", "OutputMetadata")
+__all__ = ("Caches", "OutputMetadata", "OutputMetadataContainer")
 
 
 class OutputMetadata(Context):
@@ -21,26 +23,26 @@ class OutputMetadata(Context):
 class OutputMetadataContainer(Context[OutputMetadata]):
     "Context for storing :class:`OutputMetadata`."
 
-    def process(self, path: str, output_path: str, is_exception: bool = False) -> bool | None:
-        """Sets the specified output metadata.
-        At this time, the last modified date is automatically updated.
-        It returns a bool value or ``None``.
-        The bool value is whether or not an update has been made, or ``False`` if a new cache has been created.
-        If the last_update of the file and the last update date of the cache are the same, there is no need to write the cache.
-        Return ``None`` then.
-
-        Args:
-            path: The original path of the output destination.
-            output_path: The path of the output destination.
-            is_exception: Whether to treat the cache as old even if the last modified date is the same as the last modified date of the file in the specified path."""
+    def _process(
+        self, path: str, output_path: str,
+        is_required_cache_file: bool = False,
+        is_exception: bool = False
+    ) -> bool | None:
         last_update = stat(path).st_mtime
-        if path in self:
-            if self[path].last_update >= last_update and not is_exception:
-                return None
-            self[path].last_update = last_update
-            return True
-        else:
+
+        if is_required_cache_file:
+            if path in self:
+                if self[path].last_update >= last_update and not is_exception:
+                    return None
+                self[path].last_update = last_update
+                return True
             self[path] = OutputMetadata(last_update=last_update, output_path=output_path)
+        else:
+            if exists(output_path):
+                if stat(output_path).st_mtime >= last_update and not is_exception:
+                    return None
+                return True
+
         return False
 
 

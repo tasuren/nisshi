@@ -28,7 +28,7 @@ class Page:
 
     result = ""
     content = ""
-    layout: str | None = None
+    _layout: str | None = None
 
     def __init__(self: SelfT, manager: Manager[SelfT], path: str):
         self.manager, self.path = manager, path
@@ -44,17 +44,22 @@ class Page:
         self.result = self.manager.markdown(self.result)
         self.content = self.result
         self.result = self.manager.tempylate.render_from_file(
-            self.get_layout(), **kwargs
+            self.layout, **kwargs
         )
         return self.result
 
-    def get_layout(self, first: bool = False) -> str:
+    @property
+    def layout(self) -> str:
         "Gets the path to the layout file."
-        if first or self.layout is None:
-            self.layout = "{}/{}".format(
+        if self._layout is None:
+            self._layout = "{}/{}".format(
                 self.manager.config.layout_folder,
                 self.manager.config.default_layout
                 if self.ctx.layout is None
                 else self.ctx.layout
             )
-        return self.layout
+        return self._layout
+
+    @layout.setter
+    def layout(self, value: str) -> None:
+        self._layout = value

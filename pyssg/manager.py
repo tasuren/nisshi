@@ -10,6 +10,7 @@ from os import walk, remove, rmdir, mkdir
 from shutil import copy
 from time import time, sleep
 
+from collections import defaultdict
 from dataclasses import dataclass
 
 from misaka import Markdown, HtmlRenderer
@@ -93,7 +94,13 @@ class Manager(Generic[PageT]):
 
         self.tempylate = TempylateManager[Template](*args, **kwargs)
 
-    def exchange_output_path(
+    def _exchange_extension(self, path: str, ext: str) -> str:
+        # 拡張子を交換する。
+        if "." in path:
+            path = f'{path[:path.rfind(".")+1]}{ext}'
+        return path
+
+    def exchange_path(
         self, path: str, original: str,
         to: str | None = None,
         ext: str | None = None
@@ -102,10 +109,12 @@ class Manager(Generic[PageT]):
 
         Args:
             path: The path.
+            original: Original directory path.
+            to: New directory path. (Default is output folder.)
             ext: New path extension."""
         path = path.replace(original, to or self.config.output_folder)
-        if ext is not None and "." in path:
-            path = f'{path[:path.rfind(".")+1]}{ext}'
+        if ext is not None:
+            path = self._exchange_extension(path, ext)
         return path
 
     def build_hot_reload(self, other_task: Callable[[], Any] = lambda: sleep(1)) -> None:
@@ -137,61 +146,62 @@ class Manager(Generic[PageT]):
         else:
             return data
 
-    def _walk_for_build(self, base_path: str) -> Iterator[str]:
-        # 全ファイルを一つづつ列挙して、そのパスの処理後の出力先のフォルダがなければ作ります。
-        # そして、その列挙したファイルのパスを返します。
+    def _walk_for_build(self, base_path: str) -> Iterator[tuple[str, str]]:
+        # 全ファイルを一つづつ列挙する。また、出力先のフォルダのパスも作る。
         if exists(base_path):
             for current, _, paths in walk(base_path):
-                # フォルダがないなら作る。
                 current_output = current.replace(base_path, self.config.output_folder)
-                if not exists(current_output):
-                    mkdir(current_output)
                 # ファイルのパスを返す。
                 for path in map(lambda p: "/".join((current, p)), paths):
-                    yield path
+                    yield path, current_output
 
-    def _render(self, path: str) -> bool:
+    def _mkdir_if_not_exists(self, path: str | None) -> None:
+        # 指定されたパスにフォルダがないのなら作る。
+        if path is not None:
+            if not exists(path):
+                mkdir(path)
+
+    def _render(self, path: str, directory: str | None) -> bool:
+        if not path.endswith(tuple(self.config.input_ext)):
+            return False
+
+        self._mkdir_if_not_exists(directory)
+
         # 一つのファイルのビルド(レンダリング)を行う。
-        # レイアウトのキャッシュを作ったりする。
         page = self.page_cls(self, path)
-        if self.caches.outputs.process(page.get_layout(True), "") is not None:
-            # ビルド時にレイアウトが変更している場合は、キャッシュにある最終更新日を無視してビルドする必要があります。
-            # そのためここでレイアウトが変更されている場合は、変更済みレイアウトがわかるように`set`に追加しておきます。
-            # キャッシュを無視するかどうかは下の`exchange_output_path`の第二引数に渡された値によって決まります。
-            self._updated_layouts.add(page.get_layout())
+        if self.caches.outputs._process(page.layout, "", True) is not None:
+            # レイアウトが変更されている場合は、レイアウトが変わったことがわかるようにしておく。
+            self._updated_layouts.add(page.layout)
 
-        # 最終更新日が前のビルド時のものと変わっていないのなら何もしない。
-        if (update := self.caches.outputs.process(path, self.exchange_output_path(
-            path, self.config.source_folder,
-            self.config.output_folder,
-            self.config.output_ext,
-        ), page.get_layout() in self._updated_layouts)) is None:
+        output_path = self.exchange_path(
+            path, self.config.input_folder,
+            ext=self.config.output_ext
+        )
+
+        if (update := self.caches.outputs._process(
+            path, output_path, is_exception=page.layout in self._updated_layouts
+        )) is None:
             return False
 
         # ビルドする。
         page.build()
-        with open(self.caches.outputs[path].output_path, "w") as f:
+        with open(output_path, "w") as f:
             f.write(page.result)
 
-        self.console.log(
-            _green(_update_text(update)),
-            self.caches.outputs[path].output_path
-        )
+        self.console.log(_green(_update_text(update)), output_path)
         return True
 
-    def _include(self, path: str) -> bool:
+    def _include(self, path: str, directory: str | None) -> bool:
         # includesにあるファイルをコピーします。
-        if (update := self.caches.outputs.process(path, self.join_path(
-            "output", path.replace(self.config.include_folder, "")[1:]
-        ))) is None:
+        self._mkdir_if_not_exists(directory)
+
+        output_path = self.exchange_path(path, self.config.include_folder)
+        if (update := self.caches.outputs._process(path, output_path)) is None:
             return False
 
-        copy(path, self.exchange_output_path(path, self.config.include_folder))
+        copy(path, output_path)
 
-        self.console.log(
-            _green(_update_text(update, noupdate="Copied")),
-            self.caches.outputs[path].output_path
-        )
+        self.console.log(_green(_update_text(update, noupdate="Copied")), output_path)
         return True
 
     def _before_process(self, path: str) -> bool:
@@ -211,26 +221,30 @@ class Manager(Generic[PageT]):
                 self._counter.ok += 1
 
     def _process(
-        self, function: Callable[[str], Any], path: str | None,
-        parent: str | None, missing_paths: list[str] | None = None
+        self, function: Callable[[str, str | None], Any], path: str | None,
+        directory: str | None, parent: str | None,
+        missing_paths: list[str] | None = None
     ) -> None:
         # ビルド等を行います。
         if path is None:
             assert missing_paths is not None and parent is not None
             # パスが指定されてない場合は、全ファイルを一つづつビルドする。
-            for path in self._walk_for_build(parent):
+            for path, directory in self._walk_for_build(parent):
                 if path in missing_paths:
                     missing_paths.remove(path)
                 if self._before_process(path):
-                    self._after_process(path, self._try(function, path))
+                    self._after_process(path, self._try(function, path, directory))
         elif self._before_process(path):
+            assert directory is not None
             self._counter.stop = True
-            self._after_process(path, self._try(function, path))
+            self._after_process(path, self._try(function, path, directory))
             self._counter.stop = False
 
     def build(self) -> int:
         "Build what is in the source folder."
         # ビルド先がないのなら作る。
+        self.console.log("Building all...", highlight=False)
+
         if not exists(self.config.output_folder):
             mkdir(self.config.output_folder)
 
@@ -242,13 +256,13 @@ class Manager(Generic[PageT]):
         with self.console.status("[bold blue]Building...", spinner="bouncingBar") as status:
             # ビルドを行う。
             self._process(
-                self._render, None,
-                self.config.source_folder,
+                self._render, None, None,
+                self.config.input_folder,
                 missing_paths
             )
             # assets内のファイルのコピーを行う。
             self._process(
-                self._include, None,
+                self._include, None, None,
                 self.config.include_folder,
                 missing_paths
             )
@@ -263,11 +277,51 @@ class Manager(Generic[PageT]):
                     % self._counter.error
                 )
 
-            # 削除されたファイルのキャッシュを消す。
+            # オリジナルが存在しないファイルを消す。
             status.status = "[bold blue]Cleaning..."
             status.update()
-            for missing_path in missing_paths:
-                self._clean(missing_path)
+            for current_output, _, raw_output_paths in walk(self.config.output_folder):
+                # オリジナルが存在しないものを探す。
+                delete_after: defaultdict[str, list[str]] = defaultdict(list)
+                for folder in self.config.FOLDERS:
+                    if folder == self.config.output_folder:
+                        continue
+
+                    # オリジナルのパスを作る。
+                    original_current = current_output.replace(self.config.output_folder, folder)
+                    paths = set(map(
+                        lambda op: (f"{current_output}/{op}", f"{original_current}/{op}"),
+                        raw_output_paths
+                    ))
+
+                    # オリジナルが存在するかをを確かめる。
+                    for output_path, original_path in paths:
+                        if folder == self.config.input_folder:
+                            # インプットフォルダの場合はインプット元の拡張子が変わるためありえる拡張子を全て試す。
+                            for ext in self.config.input_ext:
+                                new_path = self._exchange_extension(original_path, ext)
+                                if exists(new_path):
+                                    break
+                                delete_after[output_path].append(new_path)
+                            else:
+                                continue
+                            break
+                        elif exists(original_path):
+                            break
+                        else:
+                            delete_after[output_path].append(original_path)
+                    else:
+                        continue
+                    break
+                else:
+                    # 掃除をする。
+                    for output_path, original_paths in delete_after.items():
+                        # キャッシュに存在するものは消す。
+                        for original_path in original_paths:
+                            if original_path in self.caches.outputs:
+                                del self.caches.outputs[original_path]
+                        # オリジナルが存在しない出力結果を消す。
+                        self._clean(output_path)
 
             # キャッシュをセーブする。
             status.status = "[bold blue]Saving caches..."
@@ -277,7 +331,7 @@ class Manager(Generic[PageT]):
         return count
 
     def join_path(
-        self, target: Literal["includes", "layout", "source", "output"],
+        self, target: Literal["includes", "layout", "input", "output"] | str,
         path: str
     ) -> str:
         """Concatenates the specified folder with the path passed.
@@ -285,26 +339,18 @@ class Manager(Generic[PageT]):
         Args:
             target: Folder type. (e.g. `asset`)
             path: The path."""
-        return f'{getattr(self.config, f"{target}_folder")}/{path}'
+        return f'{getattr(self.config, f"{target}_folder", target)}/{path}'
 
     def _remove(self, path: str) -> None:
         # 指定されたファイルを削除して、その元のフォルダの削除を試みます。
         remove(path)
-        path = path[:path.rfind("/")]
-        if not path.endswith(f"/{self.config.source_folder}"):
-            try:
-                rmdir(path)
-            except (FileNotFoundError, OSError):
-                ...
+        try:
+            rmdir(path[:path.rfind("/")])
+        except (FileNotFoundError, OSError):
+            ...
 
-    def _clean(self, path: str) -> None:
-        # キャッシュにある指定されたパスを削除します。
-        if not path.startswith(self.config.layout_folder):
-            if self.caches.outputs[path].output_path \
-                    and exists(self.caches.outputs[path].output_path):
-                # もし身元不明のファイルがあった場合は消す。
-                self._remove(self.caches.outputs[path].output_path)
-                self.console.log("{} {}".format(
-                    _green('Cleaned'), self.caches.outputs[path].output_path
-                ))
-            del self.caches.outputs[path]
+    def _clean(self, output_path: str) -> None:
+        # 指定されたパスのキャッシュとファイルを削除します。
+        # 出力先のパスのファイルの削除専用です。
+        self._remove(output_path)
+        self.console.log("{} {}".format(_green('Cleaned'), output_path))
