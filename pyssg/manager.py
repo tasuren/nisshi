@@ -235,7 +235,6 @@ class Manager(Generic[PageT]):
                 if self._before_process(path):
                     self._after_process(path, self._try(function, path, directory))
         elif self._before_process(path):
-            assert directory is not None
             self._counter.stop = True
             self._after_process(path, self._try(function, path, directory))
             self._counter.stop = False
