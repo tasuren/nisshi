@@ -1,5 +1,7 @@
 # nisshi - Main
 
+from os.path import exists
+
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 import click
@@ -9,8 +11,15 @@ from nisshi import __version__, Manager, Page, Config
 
 def _build(config_file: str, hot_reload: bool, address: tuple[str, int] = ("", 0)):
     # ビルドをします。また、ホットリロードやサーバーの立ち上げをします。
-    manager = Manager[Page](Config.from_file(config_file, True))
+    manager: Manager[Page] = Manager(Config.from_file(config_file, True))
     manager.console.quiet = False
+
+    if exists("scripts"):
+        import scripts # type: ignore
+        if hasattr(scripts, "setup"):
+            scripts.setup(manager) # type: ignore
+        else:
+            raise TypeError("Since there was no setup function, the contents of `scripts` could not be executed.")
 
     if hot_reload:
         manager.build()
