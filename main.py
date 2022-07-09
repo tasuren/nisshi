@@ -1,1 +1,1 @@
-from pyssg import __main__
+from nisshi import __main__

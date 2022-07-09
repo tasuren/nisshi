@@ -1,10 +1,10 @@
-# PySSG - Main
+# nisshi - Main
 
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 import click
 
-from pyssg import __version__, Manager, Page, Config
+from nisshi import __version__, Manager, Page, Config
 
 
 def _build(config_file: str, hot_reload: bool, address: tuple[str, int] = ("", 0)):
@@ -37,13 +37,13 @@ def _build(config_file: str, hot_reload: bool, address: tuple[str, int] = ("", 0
 def cli(version: bool):
     "A simple static website generator made in Python."
     if version:
-        print(f"PySSG v{__version__}")
+        print(f"nisshi v{__version__}")
 
 
 @cli.command()
 @(_config_file_option := click.option(
     "--config-file", type=click.Path(dir_okay=False, readable=True),
-    default="pyssg.toml", help="The path to the configuration file."
+    default="nisshi.toml", help="The path to the configuration file."
 ))
 @click.option(
     "--hot-reload", default=False, is_flag=True,

@@ -1,4 +1,4 @@
-# PySSG - Json
+# nisshi - Json
 
 try:
     from orjson import loads, dumps as ordumps

@@ -1,4 +1,4 @@
-# PySSG - Config
+# nisshi - Config
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ class Config(Context[Any]):
     script_folder = "scripts"
     default_layout = "layout.html"
     exclude: Sequence[str] = ()
-    caches_file = ".pyssg_caches.json"
+    caches_file = ".nisshi_caches.json"
     input_ext: Sequence[str] = ("md",)
     output_ext = "html"
     debug_mode: bool = False

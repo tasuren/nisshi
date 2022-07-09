@@ -6,10 +6,10 @@ __pycache__
 *.*-workspace
 *.*-project
 
-pyssg.toml
+nisshi.toml
 inputs
 includes
 layouts
 outputs
-pyssg.egg-info
+nisshi.egg-info
 build

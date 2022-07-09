@@ -1,10 +1,10 @@
-# PySSG - setup
+# nisshi - setup
 
 from setuptools import setup
 from os.path import exists
 
 
-NAME = "pyssg"
+NAME = "nisshi"
 DESCRIPTION = "Little, simple and fast Static Site Generator."
 
 
@@ -45,7 +45,7 @@ setup(
     package_data={NAME: ("py.typed",)},
     entry_points={
         "console_scripts": [
-            "pyssg = pyssg.__main__:main"
+            "nisshi = nisshi.__main__:main"
         ]
     },
     install_requires=requirements,

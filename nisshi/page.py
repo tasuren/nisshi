@@ -1,4 +1,4 @@
-# PySSG - Metadata
+# nisshi - Metadata
 
 from __future__ import annotations
 
