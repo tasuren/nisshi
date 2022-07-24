@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from dataclasses import dataclass
 
+from pathlib import PurePath
 from shutil import copy
 
 from rich.traceback import Traceback
@@ -26,10 +27,10 @@ class Processor:
     "ビルドに必要な処理をする関数を実装するクラスです。"
 
     manager: Manager
-    path: str
-    directory: str | None
+    path: PurePath
+    directory: PurePath | None
     result: Any | None = None
-    output_path: str | None = None
+    output_path: PurePath | None = None
     error: Exception | None = None
     _target_directory_key: str = ""
 
@@ -91,17 +92,19 @@ class RenderProcessor(CacheProcessor):
     _target_directory_key = "input"
 
     def check(self) -> bool:
-        if self.path.endswith(tuple(self.manager.config.input_ext)) \
-                and super().check():
+        if any(
+            self.path.suffix.endswith(ext)
+            for ext in self.manager.config.input_ext
+        ) and super().check():
             self.page = self.manager.page_cls(self.manager, self.path)
 
             # レイアウトが変更されている場合は、レイアウトが変わったことがわかるようにしておく。
-            if self.manager.waste_checker.judge(self.page.layout, "") is not None:
+            if self.manager.waste_checker.judge(self.page.layout, None) is not None:
                 self.manager._updated_layouts.add(self.page.layout)
 
-            self.output_path = self.manager.exchange_path(
-                self.path, self.manager.config.input_folder,
-                extension=self.manager.config.output_ext
+            # 出力先を用意する。
+            self.output_path = self.manager.swap_path(
+                self.path, extension=self.manager.config.output_ext
             )
             self.manager.mkdir_if_not_exists(self.directory)
             self._cache(force=self.page.layout in self.manager._updated_layouts)
@@ -128,9 +131,7 @@ class IncludeProcessor(CacheProcessor):
 
     def check(self) -> bool:
         if super().check():
-            self.output_path = self.manager.exchange_path(
-                self.path, self.manager.config.include_folder
-            )
+            self.output_path = self.manager.swap_path(self.path)
             self.manager.mkdir_if_not_exists(self.directory)
             self._cache()
             return self.update is not None

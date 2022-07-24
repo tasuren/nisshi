@@ -1,8 +1,11 @@
 # nisshi - Hot Reload
 
 from __future__ import annotations
+from os import getcwd
 
 from typing import TYPE_CHECKING, Any
+
+from pathlib import PurePath
 
 from watchdog import events
 
@@ -23,21 +26,19 @@ class HotReloadFileEventHandler(events.FileSystemEventHandler, FastChecker):
         super().__init__(*args, **kwargs)
         super(events.FileSystemEventHandler, self).__init__()
 
-    def _split(self, path: str) -> tuple[str, str]:
-        "パスを分けます。"
-        place, _, path = path.replace(CURRENT, "")[1:].partition("/")
-        path = f"{place}/{path}"
-        return place, path
+    def _relative(self, path: str) -> PurePath:
+        "パスをルートフォルダ(inputs等)とファイルのパスに分けます。"
+        return PurePath(path).relative_to(getcwd())
 
-    def on_any_update(self, path: str) -> None:
+    def on_any_update(self, raw_path: str) -> None:
         "何かしら更新があった際に呼び出すべき関数です。"
-        place, path = self._split(path)
+        path = self._relative(raw_path)
 
-        if place == self.manager.config.layout_folder:
+        if path.parents[-2].name == self.manager.config.layout_folder:
             if self.is_fast(path):
                 self.manager.build()
         else:
-            match place:
+            match path.parents[-2].name:
                 case self.manager.config.include_folder:
                     processor = IncludeProcessor(self.manager, path, None)
                 case self.manager.config.input_folder:
@@ -50,15 +51,14 @@ class HotReloadFileEventHandler(events.FileSystemEventHandler, FastChecker):
         if not event.is_directory:
             self.on_any_update(event.src_path)
 
-    def _clean(self, path: str) -> None:
+    def _clean(self, path_raw: str) -> None:
         "渡されたパスのファイルの出力先にあるファイルを消す。"
-        place, path = self._split(path)
-        if place != self.manager.config.output_folder \
-                and place in self.manager.config.FOLDERS:
-            self.manager._clean(
-                self.manager.exchange_path(path, place, self.config.output_folder),
-                path
-            )
+        path = self._relative(path_raw)
+        if path.parents[-2].name != self.manager.config.output_folder \
+                and path.parents[-2].name in self.manager.config.FOLDERS:
+            self.manager._clean(self.manager.swap_path(
+                PurePath(path), self.config.output_folder
+            ), path)
 
     def on_deleted(self, event: events.DirDeletedEvent | events.FileDeletedEvent) -> None:
         if not event.is_directory:

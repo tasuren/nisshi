@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, TypeVar, Any
 
+from pathlib import PurePath
+
 from .common import Context
 
 if TYPE_CHECKING:
@@ -27,9 +29,9 @@ class Page:
 
     result = ""
     content = ""
-    _layout: str | None = None
+    _layout: PurePath | None = None
 
-    def __init__(self: SelfT, manager: Manager[SelfT], path: str):
+    def __init__(self: SelfT, manager: Manager[SelfT], path: PurePath):
         self.manager, self.path = manager, path
 
         self.ctx = PageContext()
@@ -38,27 +40,29 @@ class Page:
     def build(self, **kwargs: Any) -> str:
         kwargs.setdefault("__self__", self)
         self.result = self.manager.tempylate.render_from_file(
-            self.path, **kwargs
+            str(self.path), **kwargs
         )
         self.result = self.manager.markdown(self.result)
         self.content = self.result
         self.result = self.manager.tempylate.render_from_file(
-            self.layout, **kwargs
+            str(self.layout), **kwargs
         )
         return self.result
 
     @property
-    def layout(self) -> str:
+    def layout(self) -> PurePath:
         "Gets the path to the layout file."
         if self._layout is None:
-            self._layout = "{}/{}".format(
-                self.manager.config.layout_folder,
+            self._set_layout_path(
                 self.manager.config.default_layout
                 if self.ctx.layout is None
                 else self.ctx.layout
             )
-        return self._layout
+        return self._layout # type: ignore
 
     @layout.setter
     def layout(self, value: str) -> None:
-        self._layout = value
+        self._set_layout_path(value)
+
+    def _set_layout_path(self, value: str) -> None:
+        self._layout = PurePath(self.manager.config.layout_folder).joinpath(value)

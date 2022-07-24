@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Generic, TypeVar, Any
 
+from pathlib import PurePath
 from time import time
 
 
@@ -59,12 +60,13 @@ class FastChecker:
         self.path = ""
         self.time_ = 0.0
 
-    def is_fast(self, path: str, interval: float = 0.3) -> bool:
+    def is_fast(self, path: str | PurePath, interval: float = 0.3) -> bool:
         """This function returns whether this function has been executed within the last `interval` at the specified path.
 
         Args:
             path: The path.
             interval: It is how many seconds or less to check."""
+        path = str(path) if isinstance(path, PurePath) else path
         now = time()
         if self.path == path and now - self.time_ < interval:
             return False

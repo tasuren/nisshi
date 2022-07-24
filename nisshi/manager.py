@@ -5,8 +5,10 @@ from __future__ import annotations
 from typing import Generic, TypeVar, Any
 from collections.abc import Callable, Iterable
 
-from os.path import exists
+from pathlib import PurePath
 from os import walk, mkdir
+from os.path import exists
+
 from time import time, sleep
 
 from collections import defaultdict
@@ -92,7 +94,7 @@ class Manager(FastChecker, OSTools, Generic[PageT]):
         self._counter = Counter()
 
         self._last = ("", 0.0)
-        self._updated_layouts = set[str]()
+        self._updated_layouts = set[PurePath]()
 
         self.tempylate = TempylateManager[Template](*args, **kwargs)
 
@@ -139,22 +141,21 @@ class Manager(FastChecker, OSTools, Generic[PageT]):
             # オリジナルが存在しないファイルを消す。
             status.status = "[bold blue]Cleaning..."
             status.update()
-            for current_output, _, raw_output_paths in walk(self.config.output_folder):
+            for raw_current_output, _, raw_output_paths in walk(self.config.output_folder):
                 # オリジナルが存在しないものを探す。
-                delete_after: defaultdict[str, list[str]] = defaultdict(list)
+                delete_after: defaultdict[PurePath, list[PurePath]] = defaultdict(list)
                 for folder in self.config.FOLDERS:
                     if folder == self.config.output_folder:
                         continue
 
                     # オリジナルのパスを作る。
-                    original_current = current_output.replace(self.config.output_folder, folder)
-                    paths = set(map(
-                        lambda op: (f"{current_output}/{op}", f"{original_current}/{op}"),
-                        raw_output_paths
-                    ))
+                    current_output = PurePath(raw_current_output)
+                    original_current = self.swap_path(current_output, folder)
 
                     # オリジナルが存在するかをを確かめる。
-                    for output_path, original_path in paths:
+                    for output_path, original_path in map(lambda op: (
+                        current_output.joinpath(op), original_current.joinpath(op)
+                    ), raw_output_paths):
                         if folder == self.config.input_folder:
                             # インプットフォルダの場合はインプット元の拡張子が変わるためありえる拡張子を全て試す。
                             for ext in self.config.input_ext:
@@ -204,11 +205,11 @@ class Manager(FastChecker, OSTools, Generic[PageT]):
             self.observer.stop()
             self.observer.join()
 
-    def _clean(self, output_path: str, input_path: str | None = None) -> None:
+    def _clean(self, output_path: PurePath, input_path: PurePath | None = None) -> None:
         """指定されたパスのキャッシュとファイルを削除します。
         出力先のパスのファイルの削除専用です。
         入力元のパスが渡された場合は、それがキャッシュに存在するかを確認して、存在する場合はそのキャッシュを消します。"""
-        if input_path is None and input_path in self.caches.outputs:
-            del self.caches.outputs[input_path]
+        if input_path is not None and (raw_input_path := str(input_path)) in self.caches.outputs:
+            del self.caches.outputs[raw_input_path]
         self.remove(output_path)
         self.console.log("{} {}".format(_green('Cleaned'), output_path))

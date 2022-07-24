@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from abc import ABC, abstractmethod
 
+from pathlib import PurePath
 from os.path import exists
 from os import stat
 
@@ -31,7 +32,7 @@ class AbcWasteChecker(ABC):
     manager: Manager
 
     @abstractmethod
-    def judge(self, path: str, output_path: str, force: bool = False) -> bool | None:
+    def judge(self, path: PurePath, output_path: PurePath, force: bool = False) -> bool | None:
         """Determines whether a file in the given path should be built or not, based on the given path and the destination path after the path is built.
         This is used to avoid the waste of building again when it has already been built.
         If ``None`` is returned, it means there is no point in building.
@@ -42,6 +43,7 @@ class AbcWasteChecker(ABC):
         Args:
             path: The path of a file to be used to bulid.
             output_path: The path of a file to be built by using a file of ``path``.
+                If the output destination does not exist, it will be ``None``.
             force_bool: Whether to return a bool value instead of returning ``None`` when ``None`` is reached."""
 
 
@@ -59,24 +61,24 @@ class WasteChecker(AbcWasteChecker):
         super().__init__(*args, **kwargs)
         self.force_cache = force_cache
 
-    def judge(self, path: str, output_path: str, force: bool = False) -> bool | None:
+    def judge(self, path: PurePath, output_path: PurePath | None, force: bool = False) -> bool | None:
         if self.force_build:
-            if exists(output_path):
+            if output_path is not None and exists(output_path):
                 return True
         else:
             last_update = stat(path).st_mtime
-            if path.startswith(self.manager.config.layout_folder) or self.force_cache:
-                if path in self.manager.caches.outputs:
-                    if self.manager.caches.outputs[path].last_update >= last_update \
+            if path.parents[-2].name == self.manager.config.layout_folder or self.force_cache:
+                if (raw_path := str(path)) in self.manager.caches.outputs:
+                    if self.manager.caches.outputs[raw_path].last_update >= last_update \
                             and not force:
                         return None
-                    self.manager.caches.outputs[path].last_update = last_update
+                    self.manager.caches.outputs[raw_path].last_update = last_update
                     return True
-                self.manager.caches.outputs[path] = OutputMetadata(
+                self.manager.caches.outputs[raw_path] = OutputMetadata(
                     last_update=last_update, output_path=output_path
                 )
             else:
-                if exists(output_path):
+                if output_path is not None and exists(output_path):
                     if stat(output_path).st_mtime >= last_update and not force:
                         return None
                     return True

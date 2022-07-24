@@ -16,7 +16,7 @@ class OutputMetadata(Context):
     Output metadata is used to avoid having to re-build something that has already been built on :class:`.waste_checker.WasteChecker`."""
 
     last_update: float
-    output_path: str
+    output_path: str | None
 
 
 class Caches(Context):
