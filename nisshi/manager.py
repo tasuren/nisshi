@@ -52,7 +52,7 @@ class Counter():
 
 PageT = TypeVar("PageT", bound=Page, covariant=True)
 WasteCheckerT = TypeVar("WasteCheckerT", bound=WasteChecker, covariant=True)
-class Manager(FastChecker, OSTools, Generic[PageT]):
+class Manager(FastChecker, OSTools, Generic[PageT, WasteCheckerT]):
     """Class for building html.
 
     Args:
@@ -141,47 +141,7 @@ class Manager(FastChecker, OSTools, Generic[PageT]):
             # オリジナルが存在しないファイルを消す。
             status.status = "[bold blue]Cleaning..."
             status.update()
-            for raw_current_output, _, raw_output_paths in walk(self.config.output_folder):
-                # オリジナルが存在しないものを探す。
-                delete_after: defaultdict[PurePath, list[PurePath]] = defaultdict(list)
-                for folder in self.config.FOLDERS:
-                    if folder == self.config.output_folder:
-                        continue
-
-                    # オリジナルのパスを作る。
-                    current_output = PurePath(raw_current_output)
-                    original_current = self.swap_path(current_output, folder)
-
-                    # オリジナルが存在するかをを確かめる。
-                    for output_path, original_path in map(lambda op: (
-                        current_output.joinpath(op), original_current.joinpath(op)
-                    ), raw_output_paths):
-                        if folder == self.config.input_folder:
-                            # インプットフォルダの場合はインプット元の拡張子が変わるためありえる拡張子を全て試す。
-                            for ext in self.config.input_ext:
-                                new_path = self.exchange_extension(original_path, ext)
-                                if exists(new_path):
-                                    break
-                                delete_after[output_path].append(new_path)
-                            else:
-                                continue
-                            break
-                        elif exists(original_path):
-                            break
-                        else:
-                            delete_after[output_path].append(original_path)
-                    else:
-                        continue
-                    break
-                else:
-                    # 掃除をする。
-                    for output_path, original_paths in delete_after.items():
-                        # キャッシュに存在するものは消す。
-                        for original_path in original_paths:
-                            if original_path in self.caches.outputs:
-                                del self.caches.outputs[original_path]
-                        # オリジナルが存在しない出力結果を消す。
-                        self._clean(output_path)
+            self.clean()
 
             # キャッシュをセーブする。
             status.status = "[bold blue]Saving caches..."
@@ -204,6 +164,50 @@ class Manager(FastChecker, OSTools, Generic[PageT]):
         finally:
             self.observer.stop()
             self.observer.join()
+
+    def clean(self) -> None:
+        "Delete unwanted files in the output folder."
+        for raw_current_output, _, raw_output_paths in walk(self.config.output_folder):
+            # オリジナルが存在しないものを探す。
+            delete_after: defaultdict[PurePath, list[PurePath]] = defaultdict(list)
+            for folder in self.config.FOLDERS:
+                if folder == self.config.output_folder:
+                    continue
+
+                # オリジナルのパスを作る。
+                current_output = PurePath(raw_current_output)
+                original_current = self.swap_path(current_output, folder)
+
+                # オリジナルが存在するかをを確かめる。
+                for output_path, original_path in map(lambda op: (
+                    current_output.joinpath(op), original_current.joinpath(op)
+                ), raw_output_paths):
+                    if folder == self.config.input_folder:
+                        # インプットフォルダの場合はインプット元の拡張子が変わるためありえる拡張子を全て試す。
+                        for ext in self.config.input_ext:
+                            new_path = self.exchange_extension(original_path, ext)
+                            if exists(new_path):
+                                break
+                            delete_after[output_path].append(new_path)
+                        else:
+                            continue
+                        break
+                    elif exists(original_path):
+                        break
+                    else:
+                        delete_after[output_path].append(original_path)
+                else:
+                    continue
+                break
+            else:
+                # 掃除をする。
+                for output_path, original_paths in delete_after.items():
+                    # キャッシュに存在するものは消す。
+                    for original_path in original_paths:
+                        if original_path in self.caches.outputs:
+                            del self.caches.outputs[original_path]
+                    # オリジナルが存在しない出力結果を消す。
+                    self._clean(output_path)
 
     def _clean(self, output_path: PurePath, input_path: PurePath | None = None) -> None:
         """指定されたパスのキャッシュとファイルを削除します。

@@ -29,6 +29,7 @@ class Processor:
     manager: Manager
     path: PurePath
     directory: PurePath | None
+
     result: Any | None = None
     output_path: PurePath | None = None
     error: Exception | None = None

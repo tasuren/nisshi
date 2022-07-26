@@ -20,20 +20,32 @@ CURRENT = getcwd()
 
 
 class Config(Context[Any]):
-    "Context for storing settings."
+    """Context for storing settings.
+    It can also be written to a configuration file."""
 
-    layout_folder = "layouts"
     include_folder = "includes"
+    "This is the folder where the files to be copied to the output folder will be placed."
     input_folder = "inputs"
+    "This is the folder that contains the contents of the website."
     output_folder = "outputs"
+    "Destination folder."
     script_folder = "scripts"
+    """This is the folder where the scripts are placed.
+    It is imported at build time.
+    Also, if there is a ``setup`` function, it is executed by passing it an instance of the :class:`Manager` class."""
     default_layout = "layout.html"
-    exclude: Sequence[str] = ()
+    """The name of the file for the default layout.
+    Must be in the `layouts` folder."""
     caches_file = ".nisshi_caches.json"
+    "The name of the cache file."
     input_ext: Sequence[str] = ("md",)
+    "File format of the input."
     output_ext = "html"
+    "The file format of the output."
     debug_mode: bool = False
+    "If this is set to `True`, the error will be displayed in full when an error occurs."
     metadata: dict[str, Any] = {}
+    "This data can be accessed from within the template."
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

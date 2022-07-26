@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeVar, Any
+from typing import TYPE_CHECKING, Generic, TypeVar, Any
 
 from pathlib import PurePath
 
 from .common import Context
 
 if TYPE_CHECKING:
+    from .waste_checker import WasteChecker
     from .manager import Manager
 
 
@@ -25,13 +26,14 @@ class PageContext(Context):
 
 
 SelfT = TypeVar("SelfT", bound="Page")
-class Page:
+WasteCheckerT = TypeVar("WasteCheckerT", bound=WasteChecker)
+class Page(Generic[WasteCheckerT]):
 
     result = ""
     content = ""
     _layout: PurePath | None = None
 
-    def __init__(self: SelfT, manager: Manager[SelfT], path: PurePath):
+    def __init__(self: SelfT, manager: Manager[SelfT, WasteCheckerT], path: PurePath):
         self.manager, self.path = manager, path
 
         self.ctx = PageContext()
@@ -53,16 +55,13 @@ class Page:
     def layout(self) -> PurePath:
         "Gets the path to the layout file."
         if self._layout is None:
-            self._set_layout_path(
+            self._layout = PurePath(
                 self.manager.config.default_layout
                 if self.ctx.layout is None
                 else self.ctx.layout
             )
-        return self._layout # type: ignore
+        return self._layout
 
     @layout.setter
     def layout(self, value: str) -> None:
-        self._set_layout_path(value)
-
-    def _set_layout_path(self, value: str) -> None:
-        self._layout = PurePath(self.manager.config.layout_folder).joinpath(value)
+        self._layout = PurePath(value)

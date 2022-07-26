@@ -10,5 +10,5 @@ from .config import Config
 __all__ = ("__version__", "WasteChecker", "Manager", "Page", "Config", "Caches")
 
 
-__version__ = "0.1.0b3"
+__version__ = "0.1.0rc0"
 __author__ = "tasuren"

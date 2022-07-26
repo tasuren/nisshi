@@ -6,12 +6,12 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 import click
 
-from nisshi import __version__, Manager, Page, Config
+from nisshi import __version__, Manager, WasteChecker, Page, Config
 
 
 def _build(config_file: str, hot_reload: bool, address: tuple[str, int] = ("", 0)):
     # ビルドをします。また、ホットリロードやサーバーの立ち上げをします。
-    manager: Manager[Page] = Manager(Config.from_file(config_file, True))
+    manager: Manager[Page, WasteChecker] = Manager(Config.from_file(config_file, True))
     manager.console.quiet = False
 
     if exists("scripts"):
