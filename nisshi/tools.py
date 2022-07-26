@@ -6,14 +6,14 @@ from typing import TYPE_CHECKING
 from collections.abc import Iterator
 
 from pathlib import PurePath
-from os import rmdir, walk, mkdir, remove
+from os import listdir, rmdir, walk, mkdir, remove
 from os.path import exists
 
 if TYPE_CHECKING:
     from .manager import Manager
 
 
-__all__ = ("OSTools",)
+__all__ = ("OSTools", "enum")
 
 
 class OSTools:
@@ -85,3 +85,11 @@ class OSTools:
             rmdir(path)
         except (FileNotFoundError, OSError):
             ...
+
+
+def enum(path: PurePath) -> Iterator[PurePath]:
+    """Enumerates the paths to files in the specified directory.
+
+    Args:
+        path: The path to the directory."""
+    return map(PurePath, listdir(path))
