@@ -7,9 +7,9 @@ from typing import TYPE_CHECKING, Generic, TypeVar, Any
 from pathlib import PurePath
 
 from .common import Context
+from .waste_checker import WasteChecker
 
 if TYPE_CHECKING:
-    from .waste_checker import WasteChecker
     from .manager import Manager
 
 
