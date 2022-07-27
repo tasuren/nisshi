@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeVar, Any, overload
+from typing import TYPE_CHECKING, TypeVar, Any
 from collections.abc import Iterator, Callable, Sequence
 
 from collections import defaultdict
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from .manager import Manager
 
 
-__all__ = ("OSTools", "enum", "EventTools")
+__all__ = ("OSTools", "enum", "Group", "EventTools")
 
 
 class OSTools:
@@ -118,10 +118,63 @@ def enum(path: PurePath) -> Iterator[PurePath]:
 
 
 LiT = TypeVar("LiT", bound=Callable)
-class EventTools:
+class Bundle:
+    """This class is used when you want to group event listener functions into a class.
+    After creating an instance of this class, pass it to :meth:`EventTool.add_bundle` and execute it.
+    Then, event listeners in the bundle will be registered in :class:`EventTool`."""
+
+    @staticmethod
+    def listen(name: str | None = None) -> Callable[[LiT], LiT]:
+        """Decorator used to implement a listener in the bundle.
+        If you have a function that you wish to register as a listener for events in the bundle, add this decorator.
+
+        Args:
+            name: The name of the event.
+                If ``None``, the function name is used."""
+        def decorator(func: LiT) -> LiT:
+            setattr(func, "__nisshi_component_listener__", name or func.__name__)
+            return func
+        return decorator
+
+    @property
+    def listeners(self) -> Iterator[Callable]:
+        "Returns the listeners registered in this bundle."
+        for value in self.__dict__.values():
+            if hasattr(value, "__nisshi_component_listener__"):
+                yield value
+
+    def _prepare(self, et: EventTool) -> None:
+        for value in self.listeners:
+            et.add_listener(value, getattr(value, "__nisshi_component_listener__"))
+
+    def _close(self, et: EventTool) -> None:
+        for value in self.listeners:
+            et.remove_listener(value)
+
+
+class EventTool:
+    "Class for managing events."
+
     def __init__(self, manager: Manager):
         self.manager = manager
         self.listeners = defaultdict[str, list[Callable]](list)
+        self.bundles: dict[str, Bundle] = {}
+
+    def add_bundle(self, bundle: Bundle) -> None:
+        """Add the event listeners in the instance of the bundle passed.
+
+        Args:
+            bundle: The bundle."""
+        self.bundles[bundle.__class__.__name__] = bundle
+        self.bundles[bundle.__class__.__name__]._prepare(self)
+
+    def remove_bundle(self, bundle: Bundle) -> None:
+        """Remove the event listeners from the :class:`EventTool` in the instance of the passed bundle.
+
+        Args:
+            bundle: The bundle."""
+        self.bundles[bundle.__class__.__name__]._close(self)
+        del self.bundles[bundle.__class__.__name__]
 
     def add_listener(self, listener: Callable, name: str | None = None) -> None:
         """Add an event listener.

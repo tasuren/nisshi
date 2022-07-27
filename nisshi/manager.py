@@ -14,7 +14,6 @@ from os.path import exists
 
 from time import time, sleep
 
-from collections import defaultdict
 from dataclasses import dataclass
 
 from misaka import Markdown, HtmlRenderer
@@ -29,7 +28,7 @@ from .hot_reload import HotReloadFileEventHandler
 from .common import Context, FastChecker, _green
 from .processor import Processor, RenderProcessor, IncludeProcessor, get_target_directory
 from .waste_checker import WasteChecker
-from .tools import OSTools, EventTools
+from .tools import OSTools, EventTool
 from .config import Config
 from .page import Page
 
@@ -58,7 +57,7 @@ _UNKNOWN_TYPE = "I was given something I didn't understand."
 
 PageT = TypeVar("PageT", bound=Page, covariant=True)
 WasteCheckerT = TypeVar("WasteCheckerT", bound=WasteChecker, covariant=True)
-class Manager(FastChecker, OSTools, EventTools, Generic[PageT, WasteCheckerT]):
+class Manager(FastChecker, OSTools, EventTool, Generic[PageT, WasteCheckerT]):
     """Class for building html.
 
     Args:
