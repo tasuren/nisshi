@@ -33,9 +33,10 @@ class Config(Context[Any]):
     """This is the folder where the scripts are placed.
     It is imported at build time.
     Also, if there is a ``setup`` function, it is executed by passing it an instance of the :class:`Manager` class."""
-    default_layout = "layout.html"
-    """The name of the file for the default layout.
-    Must be in the `layouts` folder."""
+    layout_folder = "layouts"
+    "This is the folder where layout files are placed."
+    default_layout = "layouts/layout.html"
+    "The name of the file for the default layout."
     caches_file = ".nisshi_caches.json"
     "The name of the cache file."
     input_ext: Sequence[str] = ("md",)
@@ -44,6 +45,8 @@ class Config(Context[Any]):
     "The file format of the output."
     debug_mode: bool = False
     "If this is set to `True`, the error will be displayed in full when an error occurs."
+    extensions: Sequence[str] = ()
+    "Sequence of names of extensions to be loaded."
     metadata: dict[str, Any] = {}
     "This data can be accessed from within the template."
 

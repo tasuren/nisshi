@@ -7,22 +7,26 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 import click
 
 from nisshi import __version__, Manager, WasteChecker, Page, Config
+from nisshi.config import CURRENT
 
 
-def _build(config_file: str, hot_reload: bool, address: tuple[str, int] = ("", 0)):
+from sys import path
+path.append(CURRENT)
+
+
+def _build(
+    config_file: str, hot_reload: bool,
+    address: tuple[str, int] = ("", 0)
+):
     # ビルドをします。また、ホットリロードやサーバーの立ち上げをします。
     manager: Manager[Page, WasteChecker] = Manager(Config.from_file(config_file, True))
     manager.console.quiet = False
 
-    if exists("scripts"):
-        import scripts # type: ignore
-        if hasattr(scripts, "setup"):
-            scripts.setup(manager) # type: ignore
-        else:
-            raise TypeError("Since there was no setup function, the contents of `scripts` could not be executed.")
+    if exists(manager.config.script_folder):
+        manager.load_extension(manager.config.script_folder)
 
     if hot_reload:
-        manager.build()
+        manager.build_all()
         # ファイル監視をするための設定をする。
         if address is None:
             manager.build_hot_reload()
@@ -38,7 +42,7 @@ def _build(config_file: str, hot_reload: bool, address: tuple[str, int] = ("", 0
             manager.build_hot_reload(app.serve_forever)
             app.shutdown()
     else:
-        manager.build()
+        manager.build_all()
 
 
 @click.group(invoke_without_command=True)

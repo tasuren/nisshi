@@ -7,9 +7,8 @@ from typing import TYPE_CHECKING, Any
 from dataclasses import dataclass
 
 from pathlib import PurePath
+from os.path import exists
 from shutil import copy
-
-from rich.traceback import Traceback
 
 from .common import _color, _green, _update_text
 
@@ -27,8 +26,8 @@ class Processor:
     "ビルドに必要な処理をする関数を実装するクラスです。"
 
     manager: Manager
-    path: PurePath
-    directory: PurePath | None
+    input_path: PurePath
+    directory: PurePath
 
     result: Any | None = None
     output_path: PurePath | None = None
@@ -43,7 +42,7 @@ class Processor:
     def check(self) -> bool:
         """処理をしていいかどうかのチェックをする。
         デフォルトの実装は前の処理から時間が全く経っていないかどうかのチェックです。"""
-        return self.manager.is_fast(self.path)
+        return self.manager.is_fast(self.input_path)
 
     def on_run(self) -> Any:
         "処理の実行が決まった際に呼ばれる関数です。"
@@ -57,12 +56,12 @@ class Processor:
             try:
                 self.result = self.process()
             except Exception as e:
-                self.manager.console.log(Traceback(
-                    show_locals=self.manager.config.debug_mode,
-                    max_frames=100 if self.manager.config.debug_mode else 1
-                ))
+                self.manager._print_exception()
                 self.error = e
                 self.on_error(e)
+                # もし出力先のファイルが存在するなら消す。
+                if self.output_path is not None and exists(self.output_path):
+                    self.manager.remove(self.output_path)
             else:
                 self.on_success()
                 return True
@@ -70,7 +69,7 @@ class Processor:
 
     def on_error(self, _: Exception) -> Any:
         "エラー時に呼び出される関数です。"
-        self.manager.console.log(_color("bold", "red", "Failed to process"), self.path)
+        self.manager.console.log(_color("bold", "red", "Failed to process"), self.input_path)
 
     def on_success(self) -> Any:
         "成功時に呼び出される関数です。"
@@ -83,7 +82,7 @@ class CacheProcessor(Processor):
         "キャッシュの処理をします。"
         assert self.output_path is not None
         self.update = self.manager.waste_checker.judge(
-            self.path, self.output_path, *args, **kwargs
+            self.input_path, self.output_path, *args, **kwargs
         )
 
 
@@ -94,10 +93,10 @@ class RenderProcessor(CacheProcessor):
 
     def check(self) -> bool:
         if any(
-            self.path.suffix.endswith(ext)
+            self.input_path.suffix.endswith(ext)
             for ext in self.manager.config.input_ext
         ) and super().check():
-            self.page = self.manager.page_cls(self.manager, self.path)
+            self.page = self.manager.page_cls(self.manager, self.input_path)
 
             # レイアウトが変更されている場合は、レイアウトが変わったことがわかるようにしておく。
             if self.manager.waste_checker.judge(self.page.layout, None) is not None:
@@ -105,10 +104,11 @@ class RenderProcessor(CacheProcessor):
 
             # 出力先を用意する。
             self.output_path = self.manager.swap_path(
-                self.path, extension=self.manager.config.output_ext
+                self.input_path, extension=self.manager.config.output_ext
             )
             self.manager.mkdir_if_not_exists(self.directory)
             self._cache(force=self.page.layout in self.manager._updated_layouts)
+            self.page.output_path = self.output_path
 
             return self.update is not None
         return False
@@ -132,7 +132,7 @@ class IncludeProcessor(CacheProcessor):
 
     def check(self) -> bool:
         if super().check():
-            self.output_path = self.manager.swap_path(self.path)
+            self.output_path = self.manager.swap_path(self.input_path)
             self.manager.mkdir_if_not_exists(self.directory)
             self._cache()
             return self.update is not None
@@ -141,7 +141,7 @@ class IncludeProcessor(CacheProcessor):
     def process(self) -> Any:
         # コピーする。
         assert self.output_path is not None
-        copy(self.path, self.output_path)
+        copy(self.input_path, self.output_path)
 
     def on_success(self):
         self.manager.console.log(

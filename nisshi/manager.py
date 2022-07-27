@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from typing import Generic, TypeVar, Any
+from types import ModuleType
 from collections.abc import Callable, Iterable
+
+from importlib import import_module
 
 from pathlib import PurePath
 from os import walk, mkdir
@@ -26,7 +29,7 @@ from .hot_reload import HotReloadFileEventHandler
 from .common import Context, FastChecker, _green
 from .processor import Processor, RenderProcessor, IncludeProcessor, get_target_directory
 from .waste_checker import WasteChecker
-from .tools import OSTools
+from .tools import OSTools, EventTools
 from .config import Config
 from .page import Page
 
@@ -50,9 +53,12 @@ class Counter():
         return sum(map(lambda n: getattr(self, n), self.__annotations__.keys()))
 
 
+_UNKNOWN_TYPE = "I was given something I didn't understand."
+
+
 PageT = TypeVar("PageT", bound=Page, covariant=True)
 WasteCheckerT = TypeVar("WasteCheckerT", bound=WasteChecker, covariant=True)
-class Manager(FastChecker, OSTools, Generic[PageT, WasteCheckerT]):
+class Manager(FastChecker, OSTools, EventTools, Generic[PageT, WasteCheckerT]):
     """Class for building html.
 
     Args:
@@ -97,9 +103,72 @@ class Manager(FastChecker, OSTools, Generic[PageT, WasteCheckerT]):
         self._updated_layouts = set[PurePath]()
 
         self.tempylate = TempylateManager[Template](*args, **kwargs)
+        self.is_building_all = False
 
         super().__init__()
         super(FastChecker, self).__init__(self)
+        super(OSTools, self).__init__(self)
+
+        self.extensions: dict[str, ModuleType] = {}
+        for name in self.config.extensions:
+            self.load_extension(name)
+
+    def extend_page(self, new: type[Page]) -> None:
+        if not issubclass(new, Page):
+            raise TypeError(_UNKNOWN_TYPE)
+        if self.page_cls.__bases__[0] != Generic:
+            new.__bases__ = self.page_cls.__bases__
+        self.page_cls = new
+
+    def extend_waste(self, new: type[WasteChecker]) -> None:
+        if not issubclass(new, WasteChecker):
+            raise TypeError(_UNKNOWN_TYPE)
+        if self.waste_checker.__class__.__bases__:
+            new.__bases__ = self.waste_checker.__class__.__bases__
+        self.waste_checker.__class__ = new
+
+    def load_extension(self, name: str) -> None:
+        """Load the extension.
+
+        Args:
+            name: The name of the extension.
+
+        Notes:
+            This will import the specified one.
+            It then executes the function `setup`, if present, passing an instance of this class.
+            If you are making a third-party library for NISSHI, make it so that you can load it with this."""
+        self.extensions[name] = import_module(name)
+        if hasattr(self.extensions[name], "setup"):
+            self.extensions[name].setup(self)
+
+    def _print_exception(self) -> None:
+        self.console.print_exception(
+            show_locals=self.manager.config.debug_mode,
+            max_frames=100 if self.manager.config.debug_mode else 1
+        )
+
+    def build(self, path: PurePath, force: bool = False) -> None:
+        self.dispatch("on_build", path)
+        try:
+            path.parents[-2]
+        except IndexError:
+            return
+        self.waste_checker.force_build = force
+        if path.parents[-2].name == self.manager.config.layout_folder:
+            if self.is_fast(path):
+                self.manager.build_all()
+        else:
+            processor: Processor
+            directory = self.manager.swap_path(path.parent, self.manager.config.output_folder)
+            match path.parents[-2].name:
+                case self.manager.config.include_folder:
+                    processor = IncludeProcessor(self.manager, path, directory)
+                case self.manager.config.input_folder:
+                    processor = RenderProcessor(self.manager, path, directory)
+                case _:
+                    return
+            processor.start()
+        self.waste_checker.force_build = False
 
     def _build(self, processor_cls: type[Processor]) -> None:
         "指定された過程でのビルドを実行します。"
@@ -112,8 +181,10 @@ class Manager(FastChecker, OSTools, Generic[PageT, WasteCheckerT]):
             elif processor.error is not None:
                 self._counter.error += 1
 
-    def build(self) -> int:
+    def build_all(self) -> int:
         "Build what is in the source folder."
+        self.is_building_all = True
+        self.dispatch("on_build_all")
         self.console.log("Building all...", highlight=False)
 
         if not exists(self.config.output_folder):
@@ -148,6 +219,7 @@ class Manager(FastChecker, OSTools, Generic[PageT, WasteCheckerT]):
             status.update()
             self.caches.save(self.config.caches_file)
 
+        self.is_building_all = False
         return count
 
     def build_hot_reload(self, other_task: Callable[[], Any] = lambda: sleep(1)) -> None:
@@ -168,52 +240,56 @@ class Manager(FastChecker, OSTools, Generic[PageT, WasteCheckerT]):
     def clean(self) -> None:
         "Delete unwanted files in the output folder."
         for raw_current_output, _, raw_output_paths in walk(self.config.output_folder):
+            current_output = PurePath(raw_current_output)
+            output_paths = set(map(current_output.joinpath, map(PurePath, raw_output_paths)))
+
             # オリジナルが存在しないものを探す。
-            delete_after: defaultdict[PurePath, list[PurePath]] = defaultdict(list)
             for folder in self.config.FOLDERS:
                 if folder == self.config.output_folder:
                     continue
 
-                # オリジナルのパスを作る。
-                current_output = PurePath(raw_current_output)
+                # オリジナルのファイルのあるフォルダのパスを作る。
                 original_current = self.swap_path(current_output, folder)
 
                 # オリジナルが存在するかをを確かめる。
+                found = []
                 for output_path, original_path in map(lambda op: (
-                    current_output.joinpath(op), original_current.joinpath(op)
-                ), raw_output_paths):
+                    op, original_current.joinpath(op.name)
+                ), output_paths):
                     if folder == self.config.input_folder:
                         # インプットフォルダの場合はインプット元の拡張子が変わるためありえる拡張子を全て試す。
                         for ext in self.config.input_ext:
                             new_path = self.exchange_extension(original_path, ext)
                             if exists(new_path):
-                                break
-                            delete_after[output_path].append(new_path)
-                        else:
-                            continue
-                        break
+                                found.append(output_path)
                     elif exists(original_path):
-                        break
-                    else:
-                        delete_after[output_path].append(original_path)
-                else:
-                    continue
-                break
-            else:
-                # 掃除をする。
-                for output_path, original_paths in delete_after.items():
-                    # キャッシュに存在するものは消す。
-                    for original_path in original_paths:
-                        if original_path in self.caches.outputs:
-                            del self.caches.outputs[original_path]
-                    # オリジナルが存在しない出力結果を消す。
-                    self._clean(output_path)
+                        found.append(output_path)
+                # 身元が見つかったものはチェック対象から外す。
+                for path in found:
+                    output_paths.remove(path)
 
-    def _clean(self, output_path: PurePath, input_path: PurePath | None = None) -> None:
+            # 掃除をする。
+            for output_path in output_paths:
+                # キャッシュに存在するものは消す。
+                if original_path in self.caches.outputs:
+                    del self.caches.outputs[original_path]
+                # オリジナルが存在しない出力結果を消す。
+                self._clean(None, output_path, False)
+
+    def _clean(self, input_path: PurePath | None, output_path: PurePath, is_directory: bool) -> None:
         """指定されたパスのキャッシュとファイルを削除します。
         出力先のパスのファイルの削除専用です。
         入力元のパスが渡された場合は、それがキャッシュに存在するかを確認して、存在する場合はそのキャッシュを消します。"""
-        if input_path is not None and (raw_input_path := str(input_path)) in self.caches.outputs:
+        self.dispatch("on_clean", input_path, output_path, is_directory)
+        raw_input_path = str(input_path)
+        if is_directory:
+            for raw_path in set(self.caches.outputs.keys()):
+                if raw_path.startswith(str(raw_input_path)):
+                    del self.caches.outputs[raw_path]
+        elif raw_input_path in self.caches.outputs:
             del self.caches.outputs[raw_input_path]
-        self.remove(output_path)
+        if is_directory:
+            self.rmdir(output_path)
+        else:
+            self.remove(output_path)
         self.console.log("{} {}".format(_green('Cleaned'), output_path))

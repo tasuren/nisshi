@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-from collections.abc import Iterator
+from typing import TYPE_CHECKING, TypeVar, Any, overload
+from collections.abc import Iterator, Callable, Sequence
+
+from collections import defaultdict
 
 from pathlib import PurePath
 from os import listdir, rmdir, walk, mkdir, remove
 from os.path import exists
+from shutil import rmtree
 
 if TYPE_CHECKING:
     from .manager import Manager
 
 
-__all__ = ("OSTools", "enum")
+__all__ = ("OSTools", "enum", "EventTools")
 
 
 class OSTools:
@@ -38,6 +41,7 @@ class OSTools:
         extension: str | None = None
     ) -> PurePath:
         """Swap a folder path with another folder path.
+        The path passed must be relative.
 
         Args:
             path: The path.
@@ -65,6 +69,7 @@ class OSTools:
                 # ファイルのパスを返す。
                 for raw_path in raw_paths:
                     yield current.joinpath(raw_path), current_output
+                self.manager.dispatch("on_after_build_directory", current_output)
 
     def mkdir_if_not_exists(self, path: PurePath | None) -> None:
         """If there is no folder with the specified path, create one.
@@ -82,9 +87,26 @@ class OSTools:
             path: The path of the file."""
         remove(path)
         try:
-            rmdir(path)
+            rmdir(path.parent)
         except (FileNotFoundError, OSError):
             ...
+
+    def rmdir(self, path: PurePath) -> None:
+        """Delete the directory.
+
+        Args:
+            path: The path of the directory."""
+        if exists(path):
+            rmtree(path)
+
+    def remove_local_folder_path(self, path: PurePath) -> PurePath:
+        """Delete the local folder portion from the path passed.
+        For example, if the path is ``inputs/profile.md``, the path ``profile.md`` is returned.
+        The path passed must be relative.
+
+        Args:
+            path: The path."""
+        return PurePath().joinpath(*path.parts[1:])
 
 
 def enum(path: PurePath) -> Iterator[PurePath]:
@@ -92,4 +114,65 @@ def enum(path: PurePath) -> Iterator[PurePath]:
 
     Args:
         path: The path to the directory."""
-    return map(PurePath, listdir(path))
+    return map(path.joinpath, listdir(path))
+
+
+LiT = TypeVar("LiT", bound=Callable)
+class EventTools:
+    def __init__(self, manager: Manager):
+        self.manager = manager
+        self.listeners = defaultdict[str, list[Callable]](list)
+
+    def add_listener(self, listener: Callable, name: str | None = None) -> None:
+        """Add an event listener.
+
+        Args:
+            listener: Event listener function.
+            name: The name of the event.
+                If ``None``, the function name is used."""
+        self.listeners[name or listener.__name__].append(listener)
+
+    def remove_listener(self, target: Callable | str) -> None:
+        """Delete event listener.
+
+        Args:
+            target: The name of the event listener function or event."""
+        if isinstance(target, str):
+            if target in self.listeners:
+                del self.listeners[target]
+        else:
+            for listeners in self.listeners.values():
+                if target in listeners:
+                    listeners.remove(target)
+                    break
+
+    def listen(self, name: str | None = None) -> Callable[[LiT], LiT]:
+        """Decorator for registering event listeners.
+        It uses :meth:`EventTools.add_listener`.
+
+        Args:
+            name: The name of the event.
+                If ``None``, the function name is used."""
+        def decorator(func: LiT) -> LiT:
+            self.add_listener(func, name)
+            return func
+        return decorator
+
+    def dispatch(
+        self, event_name: str, /, *args: Any,
+        collect_return_value: bool = False,
+        **kwargs: Any
+    ) -> Sequence[Any]:
+        """Execute event listeners.
+
+        Args:
+            event_name: The name of the event.
+            *args: Arguments to be passed to event listeners.
+            collect_return_value: Whether to collect the return value of the event listener.
+            **kwargs: Keyword arguments to be passed to event listeners."""
+        return_values: list[Any] | None = [] if collect_return_value else None
+        for listener in self.listeners[event_name]:
+            result = listener(*args, **kwargs)
+            if collect_return_value:
+                return_values.append(result) # type: ignore
+        return return_values or ()

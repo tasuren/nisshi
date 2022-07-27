@@ -31,24 +31,42 @@ class Page(Generic[WasteCheckerT]):
 
     result = ""
     content = ""
+    output_path: PurePath
     _layout: PurePath | None = None
 
-    def __init__(self: SelfT, manager: Manager[SelfT, WasteCheckerT], path: PurePath):
-        self.manager, self.path = manager, path
+    def __init__(self: SelfT, manager: Manager[SelfT, WasteCheckerT], input_path: PurePath):
+        self.manager, self.input_path = manager, input_path
 
         self.ctx = PageContext()
         self.ctx.metadata = self.manager.config.metadata
 
-    def build(self, **kwargs: Any) -> str:
-        kwargs.setdefault("__self__", self)
+        self.manager.dispatch("on_init_page", self)
+
+    def render(self, **kwargs: Any) -> None:
+        """Renders the page.
+        The default implementation renders this class of page first, then renders the markdown.
+        And finally, we render the finished product to embed it in the layout file.
+
+        Args:
+            **kwargs: Keyword arguments to be passed to page."""
         self.result = self.manager.tempylate.render_from_file(
-            str(self.path), **kwargs
+            str(self.input_path), **kwargs
         )
         self.result = self.manager.markdown(self.result)
         self.content = self.result
         self.result = self.manager.tempylate.render_from_file(
             str(self.layout), **kwargs
         )
+
+    def build(self, **kwargs: Any) -> str:
+        """Execute :meth:`Page.render` to build.
+
+        Args:
+            **kwargs: Keyword arguments to be passed to page."""
+        kwargs.setdefault("__self__", self)
+        self.manager.dispatch("on_before_build_page", self)
+        self.render(**kwargs)
+        self.manager.dispatch("on_after_build_page", self)
         return self.result
 
     @property

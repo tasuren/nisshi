@@ -1,7 +1,6 @@
 # nisshi - Hot Reload
 
 from __future__ import annotations
-from os import getcwd
 
 from typing import TYPE_CHECKING, Any
 
@@ -9,7 +8,6 @@ from pathlib import PurePath
 
 from watchdog import events
 
-from .processor import IncludeProcessor, RenderProcessor
 from .common import FastChecker
 from .config import CURRENT
 
@@ -28,47 +26,42 @@ class HotReloadFileEventHandler(events.FileSystemEventHandler, FastChecker):
 
     def _relative(self, path: str) -> PurePath:
         "パスをルートフォルダ(inputs等)とファイルのパスに分けます。"
-        return PurePath(path).relative_to(getcwd())
+        return PurePath(path).relative_to(CURRENT)
+
+    def _wrap(self, func, *args, **kwargs):
+        try:
+            func(*args, **kwargs)
+        except Exception:
+            self.manager._print_exception()
 
     def on_any_update(self, raw_path: str) -> None:
         "何かしら更新があった際に呼び出すべき関数です。"
-        path = self._relative(raw_path)
-
-        if path.parents[-2].name == self.manager.config.layout_folder:
-            if self.is_fast(path):
-                self.manager.build()
-        else:
-            match path.parents[-2].name:
-                case self.manager.config.include_folder:
-                    processor = IncludeProcessor(self.manager, path, None)
-                case self.manager.config.input_folder:
-                    processor = RenderProcessor(self.manager, path, None)
-                case _:
-                    return
-            processor.start()
+        self._wrap(self.manager.build, self._relative(raw_path))
 
     def on_created(self, event: events.DirCreatedEvent | events.FileCreatedEvent) -> None:
         if not event.is_directory:
             self.on_any_update(event.src_path)
 
-    def _clean(self, path_raw: str) -> None:
+    def _clean(self, path_raw: str, is_directory: bool = False) -> None:
         "渡されたパスのファイルの出力先にあるファイルを消す。"
         path = self._relative(path_raw)
-        if path.parents[-2].name != self.manager.config.output_folder \
-                and path.parents[-2].name in self.manager.config.FOLDERS:
-            self.manager._clean(self.manager.swap_path(
-                PurePath(path), self.config.output_folder
-            ), path)
+        if path.parents[-2].name not in (
+            self.manager.config.output_folder,
+            self.manager.config.script_folder
+        ) and path.parents[-2].name in self.manager.config.FOLDERS:
+            self.manager._clean(path, self.manager.swap_path(
+                PurePath(path), self.manager.config.output_folder,
+                None if is_directory else self.manager.config.output_ext
+            ), is_directory)
 
     def on_deleted(self, event: events.DirDeletedEvent | events.FileDeletedEvent) -> None:
-        if not event.is_directory:
-            self._clean(event.src_path)
+        self._wrap(self._clean, event.src_path, event.is_directory)
 
     def on_modified(self, event: events.DirModifiedEvent | events.FileModifiedEvent) -> None:
         if not event.is_directory:
             self.on_any_update(event.src_path)
 
     def on_moved(self, event: events.DirMovedEvent | events.FileMovedEvent) -> None:
+        self._wrap(self._clean, event.src_path, event.is_directory)
         if not event.is_directory:
-            self._clean(event.src_path)
             self.on_any_update(event.dest_path)
