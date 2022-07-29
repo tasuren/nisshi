@@ -5,17 +5,17 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from pathlib import PurePath
+from os.path import exists
 
 from watchdog import events
 
-from .common import FastChecker
 from .config import CURRENT
 
 if TYPE_CHECKING:
     from .manager import Manager
 
 
-class HotReloadFileEventHandler(events.FileSystemEventHandler, FastChecker):
+class HotReloadFileEventHandler(events.FileSystemEventHandler):
     """`Manager`クラスのホットリロード版ビルドを実装するために使用するファイル監視クラスです。
     ファイルが変更され次第最適な処理を行います。"""
 
@@ -36,7 +36,8 @@ class HotReloadFileEventHandler(events.FileSystemEventHandler, FastChecker):
 
     def on_any_update(self, raw_path: str) -> None:
         "何かしら更新があった際に呼び出すべき関数です。"
-        self._wrap(self.manager.build, self._relative(raw_path))
+        if exists(raw_path):
+            self._wrap(self.manager.build, self._relative(raw_path))
 
     def on_created(self, event: events.DirCreatedEvent | events.FileCreatedEvent) -> None:
         if not event.is_directory:
@@ -45,10 +46,17 @@ class HotReloadFileEventHandler(events.FileSystemEventHandler, FastChecker):
     def _clean(self, path_raw: str, is_directory: bool = False) -> None:
         "渡されたパスのファイルの出力先にあるファイルを消す。"
         path = self._relative(path_raw)
+
+        try: path.parents[-2]
+        except IndexError: return
+
         if path.parents[-2].name not in (
             self.manager.config.output_folder,
             self.manager.config.script_folder
-        ) and path.parents[-2].name in self.manager.config.FOLDERS:
+        ) and path.parents[-2].name in self.manager.config.FOLDERS and (
+            path.parents[-2].name != self.manager.config.input_folder
+            or not path.suffix or path.suffix[1:] in self.manager.config.input_exts
+        ):
             self.manager._clean(path, self.manager.swap_path(
                 PurePath(path), self.manager.config.output_folder,
                 None if is_directory else self.manager.config.output_ext

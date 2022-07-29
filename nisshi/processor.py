@@ -27,7 +27,7 @@ class Processor:
 
     manager: Manager
     input_path: PurePath
-    directory: PurePath
+    output_directory: PurePath
 
     result: Any | None = None
     output_path: PurePath | None = None
@@ -40,9 +40,8 @@ class Processor:
         return get_target_directory(self.__class__, self.manager)
 
     def check(self) -> bool:
-        """処理をしていいかどうかのチェックをする。
-        デフォルトの実装は前の処理から時間が全く経っていないかどうかのチェックです。"""
-        return self.manager.is_fast(self.input_path)
+        "処理をしていいかどうかのチェックをする。"
+        return True
 
     def on_run(self) -> Any:
         "処理の実行が決まった際に呼ばれる関数です。"
@@ -94,7 +93,7 @@ class RenderProcessor(CacheProcessor):
     def check(self) -> bool:
         if any(
             self.input_path.suffix.endswith(ext)
-            for ext in self.manager.config.input_ext
+            for ext in self.manager.config.input_exts
         ) and super().check():
             self.page = self.manager.page_cls(self.manager, self.input_path)
 
@@ -106,7 +105,7 @@ class RenderProcessor(CacheProcessor):
             self.output_path = self.manager.swap_path(
                 self.input_path, extension=self.manager.config.output_ext
             )
-            self.manager.mkdir_if_not_exists(self.directory)
+            self.manager.mkdir_if_not_exists(self.output_directory)
             self._cache(force=self.page.layout in self.manager._updated_layouts)
             self.page.output_path = self.output_path
 
@@ -133,7 +132,7 @@ class IncludeProcessor(CacheProcessor):
     def check(self) -> bool:
         if super().check():
             self.output_path = self.manager.swap_path(self.input_path)
-            self.manager.mkdir_if_not_exists(self.directory)
+            self.manager.mkdir_if_not_exists(self.output_directory)
             self._cache()
             return self.update is not None
         return False

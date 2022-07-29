@@ -6,7 +6,7 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 import click
 
-from nisshi import __version__, Manager, WasteChecker, Page, Config
+from nisshi import __version__, Manager, Config
 from nisshi.config import CURRENT
 
 
@@ -19,7 +19,7 @@ def _build(
     address: tuple[str, int] = ("", 0)
 ):
     # ビルドをします。また、ホットリロードやサーバーの立ち上げをします。
-    manager: Manager[Page, WasteChecker] = Manager(Config.from_file(config_file, True))
+    manager = Manager(Config.from_file(config_file, True))
     manager.console.quiet = False
 
     if exists(manager.config.script_folder):

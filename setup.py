@@ -41,7 +41,7 @@ setup(
     author_email='tasuren@aol.com',
     license='MIT',
     keywords='ssg',
-    packages=[NAME],
+    packages=[NAME, f"{NAME}.ext"],
     package_data={NAME: ("py.typed",)},
     entry_points={
         "console_scripts": [

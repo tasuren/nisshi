@@ -4,9 +4,6 @@ from __future__ import annotations
 
 from typing import Generic, TypeVar, Any
 
-from pathlib import PurePath
-from time import time
-
 
 __all__ = ("Context",)
 
@@ -20,7 +17,7 @@ class Context(dict[Any, ValueT], Generic[ValueT]):
     def __init__(self, *args: Any, **kwargs: ValueT):
         super().__init__(*args, **kwargs)
         # 初期値を代入する。
-        for name in dir(self.__class__):
+        for name in dir(self):
             if not name.startswith("_") and not callable(value := getattr(self, name)) \
                     and name not in self:
                 value = value.copy() \
@@ -50,28 +47,6 @@ class Context(dict[Any, ValueT], Generic[ValueT]):
         if name in self:
             return self[name]
         return super().__getattribute__(name)
-
-
-class FastChecker:
-    """This class is used to check if a file path has been re-updated at an abnormally fast rate.
-    This is used to prevent duplicate builds from being accessed by text editors."""
-
-    def __init__(self):
-        self.path = ""
-        self.time_ = 0.0
-
-    def is_fast(self, path: str | PurePath, interval: float = 0.3) -> bool:
-        """This function returns whether this function has been executed within the last `interval` at the specified path.
-
-        Args:
-            path: The path.
-            interval: It is how many seconds or less to check."""
-        path = str(path) if isinstance(path, PurePath) else path
-        now = time()
-        if self.path == path and now - self.time_ < interval:
-            return False
-        self.path, self.time_ = path, now
-        return True
 
 
 def _color(m, c, t):

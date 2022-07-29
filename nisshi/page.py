@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Generic, TypeVar, Any
+from typing import Any
 
 from pathlib import PurePath
 
+from .manager import Manager, _replace_cls
 from .common import Context
-from .waste_checker import WasteChecker
-
-if TYPE_CHECKING:
-    from .manager import Manager
 
 
 __all__ = ("PageContext", "Page")
@@ -22,24 +19,20 @@ class PageContext(Context):
     title: str = ""
     description: str = ""
     head: str = ""
-    layout: str | None = None
 
 
-SelfT = TypeVar("SelfT", bound="Page")
-WasteCheckerT = TypeVar("WasteCheckerT", bound=WasteChecker)
-class Page(Generic[WasteCheckerT]):
+@_replace_cls("page_cls")
+class Page:
 
     result = ""
     content = ""
+    context_cls = PageContext
     output_path: PurePath
     _layout: PurePath | None = None
 
-    def __init__(self: SelfT, manager: Manager[SelfT, WasteCheckerT], input_path: PurePath):
+    def __init__(self, manager: Manager, input_path: PurePath):
         self.manager, self.input_path = manager, input_path
-
-        self.ctx = PageContext()
-        self.ctx.metadata = self.manager.config.metadata
-
+        self.ctx = self.context_cls()
         self.manager.dispatch("on_init_page", self)
 
     def render(self, **kwargs: Any) -> None:
@@ -73,11 +66,7 @@ class Page(Generic[WasteCheckerT]):
     def layout(self) -> PurePath:
         "Gets the path to the layout file."
         if self._layout is None:
-            self._layout = PurePath(
-                self.manager.config.default_layout
-                if self.ctx.layout is None
-                else self.ctx.layout
-            )
+            self._layout = PurePath(self.manager.config.default_layout)
         return self._layout
 
     @layout.setter

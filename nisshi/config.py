@@ -39,14 +39,29 @@ class Config(Context[Any]):
     "The name of the file for the default layout."
     caches_file = ".nisshi_caches.json"
     "The name of the cache file."
-    input_ext: Sequence[str] = ("md",)
+    input_exts: Sequence[str] = ("md",)
     "File format of the input."
     output_ext = "html"
     "The file format of the output."
+    force_build: bool = False
+    "Whether to make sure that everything that has already been built is also built."
     debug_mode: bool = False
     "If this is set to `True`, the error will be displayed in full when an error occurs."
     extensions: Sequence[str] = ()
     "Sequence of names of extensions to be loaded."
+    misaka_render_flags: Sequence[str] = ()
+    """This is a sequence containing the names of the render flags to be passed to Misaka, which is used to turn the markdown into HTML.
+    Details of the flags can be found [here](https://misaka.61924.nl/#html-render-flags)."""
+    misaka_extension_flags: Sequence[str] = ("EXT_FENCED_CODE", "EXT_QUOTE")
+    """This is a sequence containing the names of the flags of the extension to be passed to Misaka, which is used to turn the markdown into HTML.
+    Details of the flags can be found [here](https://misaka.61924.nl/#extensions)."""
+    misaka_nesting_level: int = 0
+    """
+    This value is used by Misaka, the markdown processing library used by nisshi.
+
+        nesting_level limits what's included in the table of contents. The default value is 0, no headers.
+
+    The explanation above was taken from Misaka."""
     metadata: dict[str, Any] = {}
     "This data can be accessed from within the template."
 

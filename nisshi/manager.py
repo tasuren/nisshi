@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Generic, TypeVar, Any
+from typing import TYPE_CHECKING, TypeVar, TypeAlias, Any
 from types import ModuleType
 from collections.abc import Callable, Iterable
 
 from importlib import import_module
+from dataclasses import dataclass
 
 from pathlib import PurePath
 from os import walk, mkdir
@@ -14,26 +15,27 @@ from os.path import exists
 
 from time import time, sleep
 
-from dataclasses import dataclass
-
-from misaka import Markdown, HtmlRenderer
+from misaka import Markdown, HtmlRenderer, constants as misaka_constants
 from tempylate import Manager as TempylateManager, Template
 
 from rich.console import Console
+from rich.traceback import Traceback
 
 from watchdog.observers import Observer
 
 from .caches import Caches
 from .hot_reload import HotReloadFileEventHandler
-from .common import Context, FastChecker, _green
+from .common import Context, _green
 from .processor import Processor, RenderProcessor, IncludeProcessor, get_target_directory
-from .waste_checker import WasteChecker
 from .tools import OSTools, EventTool
 from .config import Config
-from .page import Page
+
+if TYPE_CHECKING:
+    from .waste_checker import WasteChecker
+    from .page import Page
 
 
-__all__ = ("Manager",)
+__all__ = ("Manager", "FastChecker")
 
 
 @dataclass
@@ -52,79 +54,69 @@ class Counter():
         return sum(map(lambda n: getattr(self, n), self.__annotations__.keys()))
 
 
-_UNKNOWN_TYPE = "I was given something I didn't understand."
+def _calculate_misaka_flags(flags):
+    value = 0
+    for name in flags:
+        value |= getattr(misaka_constants, name)
+    return value
 
 
-PageT = TypeVar("PageT", bound=Page, covariant=True)
-WasteCheckerT = TypeVar("WasteCheckerT", bound=WasteChecker, covariant=True)
-class Manager(FastChecker, OSTools, EventTool, Generic[PageT, WasteCheckerT]):
+class Manager(OSTools, EventTool):
     """Class for building html.
 
     Args:
         config: An instance of :class:`config.Config` where the configuration is stored.
         caches: Instance of :class:`config.config` where the cache is stored.
         *args: Arguments to be passed to the constructor of the template engine's class for template management (:class:`tempylate.manager.Manager`).
-        misaka_html_renderer_kwargs: Keyword arguments to be passed to the constructor of :class:`misaka.HtmlRenderer` of missaka, a library for markdown rendering.
-        misaka_markdown_kwargs: Keyword arguments to be passed to the constructor of :class:`misaka.Markdown` of missaka, a library for markdown rendering.
-        waste_checker_cls: Class waste checker to check if you don't need to build. Default is :class:`.waste_checker.WasteChecker`.
-        waste_checker_args: Arguments to be passed to the constructor of the waste checker.
+        waste_checker_args: Arguments without Manager's instance to be passed to the constructor of the waste checker.
         waste_checker_kwargs: Keyword arguments to be passed to the constructor of the waste checker.
-        page_cls: This class is used to store page information. Default is :class:`page.Page`.
         **kwargs: Keyword arguments to be passed to the constructor of the template engine's class for template management (:class:`tempylate.manager.Manager`)."""
 
     observer: Observer | None
+    if TYPE_CHECKING:
+        page_cls: TypeAlias = Page
+        """This is :class:`Page`.
+        If you want to use an extension of the page class, create a class that extends the page class obtained by this attribute and extend it.
+        Otherwise, implementations of page classes extended by other extensions may be canceled out."""
+        waste_checker_cls: TypeAlias = WasteChecker
+        """This is :class:`WasteChecker`.
+        If you want to use an extension of the WasteChecker class, create a class that extends the WasteChecker class obtained by this attribute and extend it.
+        Otherwise, implementations of WasteChecker classes extended by other extensions may be canceled out."""
 
     def __init__(
         self, config: Config | None = None, caches: Caches | None = None,
-        *args: Any, misaka_html_renderer_kwargs: dict[str, Any] | None = None,
-        misaka_markdown_kwargs: dict[str, Any] | None = None,
-        waste_checker_cls: type[WasteCheckerT] | None = None,
-        waste_checker_args: Iterable[Any] = (),
+        *args: Any, waste_checker_args: Iterable[Any] = (),
         waste_checker_kwargs: dict[str, Any] | None = None,
-        page_cls: type[PageT] | None = None, **kwargs: Any
+        **kwargs: Any
     ):
-        self.markdown = Markdown(
-            HtmlRenderer(**misaka_html_renderer_kwargs or {}), **misaka_markdown_kwargs or {}
-        )
         self.config = config or Config()
-        self.page_cls = page_cls or Page
-        self.waste_checker = (waste_checker_cls or WasteChecker)(
-            *waste_checker_args, **(waste_checker_kwargs or {})
+        self.waste_checker = self.waste_checker_cls(
+            self, *waste_checker_args, **(waste_checker_kwargs or {})
         )
         self.waste_checker.manager = self
-        self.console = Console(quiet=True)
+        self.console: Console = Console(quiet=True)
+
+        self.markdown = Markdown(HtmlRenderer(
+            _calculate_misaka_flags(self.config.misaka_render_flags),
+            self.config.misaka_nesting_level
+        ), extensions=_calculate_misaka_flags(self.config.misaka_extension_flags))
 
         self.caches = caches or Caches.from_file(self.config.caches_file)
         self.ctx: Context[Any] = Context()
         self._counter = Counter()
 
         self._last = ("", 0.0)
-        self._updated_layouts = set[PurePath]()
+        self._updated_layouts: set[PurePath] = set()
 
         self.tempylate = TempylateManager[Template](*args, **kwargs)
         self.is_building_all = False
 
-        super().__init__()
-        super(FastChecker, self).__init__(self)
+        super().__init__(self)
         super(OSTools, self).__init__(self)
 
         self.extensions: dict[str, ModuleType] = {}
         for name in self.config.extensions:
             self.load_extension(name)
-
-    def extend_page(self, new: type[Page]) -> None:
-        if not issubclass(new, Page):
-            raise TypeError(_UNKNOWN_TYPE)
-        if self.page_cls.__bases__[0] != Generic:
-            new.__bases__ = self.page_cls.__bases__
-        self.page_cls = new
-
-    def extend_waste(self, new: type[WasteChecker]) -> None:
-        if not issubclass(new, WasteChecker):
-            raise TypeError(_UNKNOWN_TYPE)
-        if self.waste_checker.__class__.__bases__:
-            new.__bases__ = self.waste_checker.__class__.__bases__
-        self.waste_checker.__class__ = new
 
     def load_extension(self, name: str) -> None:
         """Load the extension.
@@ -141,21 +133,24 @@ class Manager(FastChecker, OSTools, EventTool, Generic[PageT, WasteCheckerT]):
             self.extensions[name].setup(self)
 
     def _print_exception(self) -> None:
-        self.console.print_exception(
+        __import__("traceback").print_exc()
+        return
+        self.console.log(Traceback(
             show_locals=self.manager.config.debug_mode,
             max_frames=100 if self.manager.config.debug_mode else 1
-        )
+        ))
 
     def build(self, path: PurePath, force: bool = False) -> None:
         self.dispatch("on_build", path)
+        before = self.config.force_build
+        self.config.force_build = force
+
         try:
             path.parents[-2]
         except IndexError:
             return
-        self.waste_checker.force_build = force
         if path.parents[-2].name == self.manager.config.layout_folder:
-            if self.is_fast(path):
-                self.manager.build_all()
+            self.manager.build_all()
         else:
             processor: Processor
             directory = self.manager.swap_path(path.parent, self.manager.config.output_folder)
@@ -167,7 +162,8 @@ class Manager(FastChecker, OSTools, EventTool, Generic[PageT, WasteCheckerT]):
                 case _:
                     return
             processor.start()
-        self.waste_checker.force_build = False
+    
+        self.config.force_build = before
 
     def _build(self, processor_cls: type[Processor]) -> None:
         "指定された過程でのビルドを実行します。"
@@ -183,7 +179,7 @@ class Manager(FastChecker, OSTools, EventTool, Generic[PageT, WasteCheckerT]):
     def build_all(self) -> int:
         "Build what is in the source folder."
         self.is_building_all = True
-        self.dispatch("on_build_all")
+        self.dispatch("on_before_build_all")
         self.console.log("Building all...", highlight=False)
 
         if not exists(self.config.output_folder):
@@ -219,6 +215,7 @@ class Manager(FastChecker, OSTools, EventTool, Generic[PageT, WasteCheckerT]):
             self.caches.save(self.config.caches_file)
 
         self.is_building_all = False
+        self.dispatch("on_after_build_all")
         return count
 
     def build_hot_reload(self, other_task: Callable[[], Any] = lambda: sleep(1)) -> None:
@@ -257,7 +254,7 @@ class Manager(FastChecker, OSTools, EventTool, Generic[PageT, WasteCheckerT]):
                 ), output_paths):
                     if folder == self.config.input_folder:
                         # インプットフォルダの場合はインプット元の拡張子が変わるためありえる拡張子を全て試す。
-                        for ext in self.config.input_ext:
+                        for ext in self.config.input_exts:
                             new_path = self.exchange_extension(original_path, ext)
                             if exists(new_path):
                                 found.append(output_path)
@@ -292,3 +289,16 @@ class Manager(FastChecker, OSTools, EventTool, Generic[PageT, WasteCheckerT]):
         else:
             self.remove(output_path)
         self.console.log("{} {}".format(_green('Cleaned'), output_path))
+
+
+CT = TypeVar("CT")
+def _replace_cls(name: str) -> Callable[[CT], CT]:
+    def decorator(c: CT) -> CT:
+        def __init_subclass__(cls, /, **kwargs):
+            setattr(Manager, name, cls)
+            super(c, cls).__init_subclass__(**kwargs)
+        c = type(c.__name__, (c,), {"__init_subclass__": __init_subclass__}) # type: ignore
+        if not hasattr(Manager, name):
+            setattr(Manager, name, c)
+        return c
+    return decorator

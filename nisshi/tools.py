@@ -12,6 +12,8 @@ from os import listdir, rmdir, walk, mkdir, remove
 from os.path import exists
 from shutil import rmtree
 
+from .common import Context
+
 if TYPE_CHECKING:
     from .manager import Manager
 
@@ -56,7 +58,7 @@ class OSTools:
 
     def walk_for_build(self, target_directory: str) -> Iterator[tuple[PurePath, PurePath]]:
         """This is :func:`os.walk` for build.
-        Returns the path to a file in the specified directory and the path to the output directory when a file of that path is built."""
+        Returns the path to a file in the specified input directory and the path to the output directory when a file of that path is built."""
         if exists(target_directory):
             for current_, _, raw_paths in walk(target_directory):
                 current_output = PurePath(self.manager.config.output_folder)
@@ -66,10 +68,11 @@ class OSTools:
                     ...
                 else:
                     current_output = current_output.joinpath(*current.parts[1:])
+                self.manager.dispatch("on_before_build_directory", current, current_output)
                 # ファイルのパスを返す。
                 for raw_path in raw_paths:
                     yield current.joinpath(raw_path), current_output
-                self.manager.dispatch("on_after_build_directory", current_output)
+                self.manager.dispatch("on_after_build_directory", current, current_output)
 
     def mkdir_if_not_exists(self, path: PurePath | None) -> None:
         """If there is no folder with the specified path, create one.
@@ -139,7 +142,7 @@ class Bundle:
     @property
     def listeners(self) -> Iterator[Callable]:
         "Returns the listeners registered in this bundle."
-        for value in self.__dict__.values():
+        for value in map(lambda n: getattr(self, n), dir(self)):
             if hasattr(value, "__nisshi_component_listener__"):
                 yield value
 
@@ -158,7 +161,7 @@ class EventTool:
     def __init__(self, manager: Manager):
         self.manager = manager
         self.listeners = defaultdict[str, list[Callable]](list)
-        self.bundles: dict[str, Bundle] = {}
+        self.bundles = Context[Bundle]()
 
     def add_bundle(self, bundle: Bundle) -> None:
         """Add the event listeners in the instance of the bundle passed.
