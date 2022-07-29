@@ -57,7 +57,9 @@ class ArticleContext(PageContext):
     description: str = ""
     "Article description."
     created_at: float = 0.0
-    "The date and time the article was created. Defaults to ``0.0``, where ``0.0`` is automatically assigned the date and time the article file was created."
+    """The date and time the article was created. Defaults to ``0.0``, where ``0.0`` is automatically assigned the date and time the article file was created.
+    If you are on Linux, perhaps this could be the last update date.
+    In that case, we apologize for the inconvenience, but you can manually put it in the file like ``^^ self.ctx.created_at = ... # file creation time in epoch seconds ^^``."""
     last_updated_at: float = 0.0
     "The date the article was last modified. Defaults to ``0.0``, where ``0.0`` is automatically assigned the last modified date of the article file."
 
@@ -73,7 +75,9 @@ class ArticlePage(OriginalManager.page_cls):
     def __init__(self, *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
         self._stat = stat(self.input_path)
-        self.ctx.created_at = self.ctx.created_at or self._stat.st_birthtime
+        self.ctx.created_at = self.ctx.created_at or getattr(
+            self._stat, "st_birthtime", self._stat.st_ctime
+        )
         self.ctx.last_updated_at = self.ctx.last_updated_at or self._stat.st_mtime
 
     @property
@@ -198,7 +202,8 @@ class Articles(Bundle):
         for index, item in enumerate(data):
             for new_index, new in enumerate(self._data):
                 if item["file_name"] == new["file_name"]:
-                    data[index] = new
+                    if item["last_updated_at"] < new["last_updated_at"]:
+                        data[index] = new
                     del self._data[new_index]
                     break
         data.extend(self._data)
