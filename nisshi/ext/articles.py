@@ -228,7 +228,7 @@ class Articles(Bundle):
         # 記事一覧を必要とするファイルのビルドを行います。これを実行する時は、`._input_directory`が`None`ではない必要があります。
         assert self._input_directory
         self._is_ready = True
-        print(1)
+        # print(1)
         self.manager.console.log(
             "Now that the `%s` has been updated, rebuild the files with the article list."
             % raw_parent
