@@ -2,7 +2,11 @@
 A simple and easy-to-understand static site generator.
 
 You can install beta version by running this command:  
-`pip3 install git+https://github.com/tasuren/nisshi`
+`pip install git+https://github.com/tasuren/nisshi`
+
+## Examples
+My [website](https://github.com/tasuren/website) and [portfolio](https://github.com/tasuren/portfolio) are made by nisshi.  
+These website are built on github workflows.
 
 ## Quick start
 nisshi use tempylate for template engine.  
@@ -47,10 +51,6 @@ You can set an attribute on `self` to bring a value to `layout.html`.
 self.ctx.last_updated = 1663161341.953884
 ^^
 ```
-
-## Examples
-My [website](https://tasuren.f5.si) and [portfolio](https://tasuren.github.io) are made by nisshi.  
-These website are built on github workflows.
 
 ## License
 MIT License
