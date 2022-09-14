@@ -90,7 +90,7 @@ class ArticlePage(OriginalManager.page_cls):
         "Retrieve article data."
         # 記事一覧を入れる必要があるファイルとしてキャッシュしておく。
         if self.input_path.parent not in self.manager.caches.articles:
-            self.manager.caches.articles[raw_parent := str(self.input_path.parent)] = []
+            self.manager.caches.articles[raw_parent := str(self.input_path.parent)] = [] # type: ignore
         else:
             raw_parent = str(self.input_path.parent)
         if self.input_path.name not in self.manager.caches.articles[raw_parent]:

@@ -15,5 +15,5 @@ __all__ = (
 )
 
 
-__version__ = "0.1.0b6"
+__version__ = "0.1.0b7"
 __author__ = "tasuren"
