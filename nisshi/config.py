@@ -52,7 +52,7 @@ class Config(Context[Any]):
     misaka_render_flags: Sequence[str] = ()
     """This is a sequence containing the names of the render flags to be passed to Misaka, which is used to turn the markdown into HTML.
     Details of the flags can be found [here](https://misaka.61924.nl/#html-render-flags)."""
-    misaka_extension_flags: Sequence[str] = ("EXT_FENCED_CODE", "EXT_QUOTE")
+    misaka_extension_flags: Sequence[str] = ("EXT_TABLES", "EXT_FENCED_CODE", "EXT_UNDERLINE", "EXT_QUOTE")
     """This is a sequence containing the names of the flags of the extension to be passed to Misaka, which is used to turn the markdown into HTML.
     Details of the flags can be found [here](https://misaka.61924.nl/#extensions)."""
     misaka_nesting_level: int = 0

@@ -6,6 +6,8 @@ from typing import Any
 
 from pathlib import PurePath
 
+from tempylate import Template
+
 from .manager import Manager, _replace_cls
 from .common import Context
 
@@ -21,6 +23,21 @@ class PageContext(Context):
     head: str = ""
 
 
+def _render_hook(self, kwargs):
+    kwargs["__self__"].template = self
+    kwargs["__self__"].on_read_raw()
+_original_render = Template.render
+def _new_render(self, *args, **kwargs):
+    _render_hook(self, kwargs)
+    return _original_render(self, *args, **kwargs)
+Template.render = _new_render # type: ignore
+_original_aiorender = Template.aiorender
+async def _new_aiorender(self, *args, **kwargs):
+    _render_hook(self, kwargs)
+    return await _original_aiorender(self, *args, **kwargs)
+Template.aiorender = _new_aiorender # type: ignore
+
+
 @_replace_cls("page_cls")
 class Page:
 
@@ -28,6 +45,7 @@ class Page:
     content = ""
     context_cls = PageContext
     output_path: PurePath
+    template: Template | None = None
     _layout: PurePath | None = None
 
     def __init__(self, manager: Manager, input_path: PurePath):
@@ -72,3 +90,6 @@ class Page:
     @layout.setter
     def layout(self, value: str) -> None:
         self._layout = PurePath(value)
+
+    def on_read_raw(self) -> None:
+        "Function called when a document to be rendered is loaded."
