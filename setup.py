@@ -41,7 +41,7 @@ setup(
     author_email='tasuren@aol.com',
     license='MIT',
     keywords='ssg',
-    packages=[NAME, f"{NAME}.ext"],
+    packages=(NAME,),
     package_data={NAME: ("py.typed",)},
     entry_points={
         "console_scripts": [
@@ -51,10 +51,10 @@ setup(
     install_requires=requirements,
     extras_requires={},
     python_requires='>=3.10.0',
-    classifiers=[
+    classifiers=(
         'Programming Language :: Python :: 3.10',
         "Topic :: Text Processing :: Markup :: HTML",
         "Environment :: Console",
         'Typing :: Typed'
-    ]
+    )
 )

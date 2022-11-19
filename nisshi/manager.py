@@ -15,7 +15,6 @@ from os.path import exists
 
 from time import time, sleep
 
-from misaka import Markdown, HtmlRenderer, constants as misaka_constants
 from tempylate import Manager as TempylateManager, Template
 
 from rich.console import Console
@@ -28,6 +27,7 @@ from .hot_reload import HotReloadFileEventHandler
 from .common import Context, _green
 from .processor import Processor, RenderProcessor, IncludeProcessor, get_target_directory
 from .tools import OSTools, EventTool
+from .markdown import markdown
 from .config import Config
 
 if TYPE_CHECKING:
@@ -52,13 +52,6 @@ class Counter():
 
     def sum_(self) -> int:
         return sum(map(lambda n: getattr(self, n), self.__annotations__.keys()))
-
-
-def _calculate_misaka_flags(flags):
-    value = 0
-    for name in flags:
-        value |= getattr(misaka_constants, name)
-    return value
 
 
 class Manager(OSTools, EventTool):
@@ -96,11 +89,6 @@ class Manager(OSTools, EventTool):
         self.waste_checker.manager = self
         self.console: Console = Console(quiet=True)
 
-        self.markdown = Markdown(HtmlRenderer(
-            _calculate_misaka_flags(self.config.misaka_render_flags),
-            self.config.misaka_nesting_level
-        ), extensions=_calculate_misaka_flags(self.config.misaka_extension_flags))
-
         self.caches = caches or Caches.from_file(self.config.caches_file)
         self.ctx: Context[Any] = Context()
         self._counter = Counter()
@@ -117,6 +105,13 @@ class Manager(OSTools, EventTool):
         self.extensions: dict[str, ModuleType] = {}
         for name in self.config.extensions:
             self.load_extension(name)
+
+    def markdown(self, text: str) -> str:
+        """Convert markdown to html.
+
+        Args:
+            text: The markdown."""
+        return markdown(text)
 
     def load_extension(self, name: str) -> None:
         """Load the extension.

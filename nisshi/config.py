@@ -49,19 +49,6 @@ class Config(Context[Any]):
     "If this is set to `True`, the error will be displayed in full when an error occurs."
     extensions: Sequence[str] = ()
     "Sequence of names of extensions to be loaded."
-    misaka_render_flags: Sequence[str] = ()
-    """This is a sequence containing the names of the render flags to be passed to Misaka, which is used to turn the markdown into HTML.
-    Details of the flags can be found [here](https://misaka.61924.nl/#html-render-flags)."""
-    misaka_extension_flags: Sequence[str] = ("EXT_TABLES", "EXT_FENCED_CODE", "EXT_UNDERLINE", "EXT_QUOTE")
-    """This is a sequence containing the names of the flags of the extension to be passed to Misaka, which is used to turn the markdown into HTML.
-    Details of the flags can be found [here](https://misaka.61924.nl/#extensions)."""
-    misaka_nesting_level: int = 0
-    """
-    This value is used by Misaka, the markdown processing library used by nisshi.
-
-        nesting_level limits what's included in the table of contents. The default value is 0, no headers.
-
-    The explanation above was taken from Misaka."""
     metadata: dict[str, Any] = {}
     "This data can be accessed from within the template."
 
